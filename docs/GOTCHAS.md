@@ -12,7 +12,7 @@ El repo esta alineado con `ESP-IDF 5.5.4`. Evitar migrar a `6.x` sin una razon c
 
 ## Mantener Compatibles LVGL Y esp_lvgl_port
 
-El BSP depende de `espressif/esp_lvgl_port`. Versiones recientes del port esperan simbolos de LVGL 9.3+, como `LV_COLOR_FORMAT_RGB565_SWAPPED`. Por eso el manifest fija `lvgl/lvgl` en `9.3.0` en vez de `9.2.0`.
+El BSP depende de `espressif/esp_lvgl_port`. La combinacion resuelta y verificada en este repo es `esp_lvgl_port 2.8.0~1` + `lvgl 9.3.0`. El intento con `lvgl 9.2.0` fallo por simbolos esperados por el port, como `LV_COLOR_FORMAT_RGB565_SWAPPED`.
 
 ## PSRAM Es Obligatoria Para UI Real
 
@@ -52,6 +52,16 @@ bsp_display_backlight_on();
 bsp_display_backlight_off();
 ```
 
+`bsp_display_start()` inicializa el brillo al 100%. Si la app quiere otro brillo inicial, llamarlo justo despues de arrancar display.
+
+## Caveats BSP v1.0.6
+
+El BSP tiene comentarios heredados de otros paneles/placas. Priorizar el codigo real y no la prosa del header.
+
+- `bsp_display_start_with_config()` recibe `bsp_display_cfg_t`, pero el codigo actual calcula el buffer LVGL desde Kconfig (`CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT` o full-screen si avoid-tear), no desde todos los campos del struct.
+- Las opciones/ayudas Kconfig mencionan RGB LCD y LEDC PWM, pero esta placa usa panel QSPI `SH8601` y brillo por comando `0x51`.
+- El header I2C menciona dispositivos QMA7981/OV2640, pero en esta placa los dispositivos relevantes son FT3168, QMI8658, PCF85063, AXP2101 y codecs.
+
 ## LVGL No Es Thread-Safe
 
 Toda llamada `lv_*` hecha fuera del task interno de LVGL debe estar protegida:
@@ -86,11 +96,47 @@ Centralizar el mapeo en una sola funcion para evitar aplicar doble inversion en 
 
 ## BSP No Expone IMU, RTC Ni PMU
 
-Aunque la placa los tiene, `BSP_CAPS_IMU` y `BSP_CAPS_BUTTONS` son 0. Para IMU usar `waveshare/qmi8658`; para RTC/PMU crear componente propio o portar lo minimo de los ejemplos oficiales.
+Aunque la placa los tiene, `BSP_CAPS_IMU` y `BSP_CAPS_BUTTONS` son 0. Para IMU usar `waveshare/qmi8658`; para RTC/PMU crear componente propio o portar lo minimo de los ejemplos oficiales. Para botones, `BOOT` es GPIO0, pero `PWR` aparece en wiki como `EXIO6`, no como GPIO directo del ESP32-S3.
+
+## PWR Puede Apagar La Placa
+
+El boton `PWR` tiene comportamiento de alimentacion ademas de posible input de usuario.
+
+- Pulsado unos 6 s en encendido apaga la placa.
+- Pulsacion en apagado enciende la placa.
+- En runtime la wiki dice que se lee por `EXIO6` con nivel alto al pulsar.
+- No implementar long-press de app cercano a 6 s sin gestionar el riesgo de apagado.
 
 ## AXP2101: Porcentaje De Bateria No Lineal
 
 La wiki avisa que el porcentaje estimado puede fluctuar, especialmente con cargador conectado, cambios de carga o envejecimiento de bateria. Preferir voltaje y tendencia para decisiones importantes.
+
+El ejemplo ESP-IDF oficial llama `PMU.disableTSPinMeasure()` porque la placa no tiene medida de temperatura de bateria por TS; dejar esa deteccion activa puede causar carga anomala.
+
+## Seguridad De Bateria Y Agua
+
+La wiki incluye advertencias de LiPo que deben respetarse en cualquier app que gestione energia:
+
+- Usar bateria compatible, segura y con proteccion; evitar baterias/cargadores baratos o de baja calidad.
+- No invertir polaridad al cargar/descargar.
+- Evitar humedad, altas temperaturas, golpes, sobrecarga y sobredescarga.
+- Para almacenamiento largo, retirar la bateria y evitar dejarla en estado de carga muy bajo.
+- Reemplazar baterias envejecidas al final de su vida util o tras unos dos anos.
+- La placa no es waterproof; mantenerla seca.
+
+## microSD: GPIO17 Es Solo Referencia Arduino
+
+La wiki/ejemplos Arduino etiquetan la TF card como SPI con `CS GPIO17`, `DI/MOSI GPIO1`, `DO/MISO GPIO3`, `SCK GPIO2`. En ESP-IDF el BSP usa SDMMC 1-bit con `CLK GPIO2`, `CMD GPIO1`, `D0 GPIO3`, sin CS ni card-detect.
+
+Decision: para ESP-IDF usar `bsp_sdcard_mount()` y no configurar `GPIO17` salvo que se porte deliberadamente un driver SPI-style y se valide en hardware.
+
+## Factory Firmware Puede Asumir 32 MB
+
+El repo oficial contiene firmware factory/test para self-check. Uno de los bins vistos mide unos 29 MB, asi que no encaja con la config baseline de 16 MB de este repo. No flashear factory bins grandes sin confirmar flash real y offsets.
+
+## Arduino LVGL Menos Fluido Que ESP-IDF
+
+La wiki indica que los ejemplos LVGL en Arduino son menos fluidos porque la ruta Arduino TFT/DMA acelera menos. Los ejemplos ESP-IDF usan configuraciones de buffering/anti-tearing mas adecuadas. No extrapolar rendimiento Arduino al baseline ESP-IDF.
 
 ## Brookesia No Es Baseline
 
@@ -107,3 +153,10 @@ Los ejemplos Arduino son utiles para entender sensores y comportamiento, pero es
 ## Recovery
 
 Si el firmware crashea y el USB no responde, mantener `BOOT` y encender/resetear para entrar en modo descarga antes de flashear de nuevo.
+
+Notas de FAQ:
+
+- Si el flasheo falla porque el monitor ocupa el puerto, cerrar monitor y reintentar.
+- Si la placa entra en modo descarga forzado, puede no salir automaticamente tras flashear; apagar y reiniciar.
+- Si el monitor queda en `waiting for download...`, volver a alimentar/reiniciar la placa.
+- Para volver a encender tras apagado completo, la FAQ indica mantener `PWR` al menos 6 s y luego pulsar `PWR` otra vez.

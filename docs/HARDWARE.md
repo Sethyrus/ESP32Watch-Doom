@@ -2,13 +2,14 @@
 
 Referencia tecnica de la placa Waveshare `ESP32-S3-Touch-AMOLED-2.06` para este proyecto.
 
-Fuentes usadas: wiki oficial Waveshare, repo oficial `waveshareteam/ESP32-S3-Touch-AMOLED-2.06`, componentes del ESP Component Registry, BSP `waveshare/esp32_s3_touch_amoled_2_06` v1.0.6 y proyecto previo local `MyESP32S3Watch`.
+Fuentes usadas: wiki oficial Waveshare, repo oficial `waveshareteam/ESP32-S3-Touch-AMOLED-2.06`, componentes del ESP Component Registry, BSP `waveshare/esp32_s3_touch_amoled_2_06` v1.0.6, componente `waveshare/qmi8658` y proyecto previo local `MyESP32S3Watch`. Ver enlaces exactos en `docs/SOURCES.md`.
 
 ## Resumen De Placa
 
 | Bloque | Modelo / dato | Notas |
 | --- | --- | --- |
 | MCU | `ESP32-S3R8` | Dual-core LX7, hasta 240 MHz. |
+| Wireless | Wi-Fi 2.4 GHz + Bluetooth LE 5 | Antena SMD integrada segun wiki. |
 | PSRAM | 8 MB octal | Necesaria para LVGL fluido y buffers de display. |
 | Flash | 32 MB segun wiki | Los ejemplos ESP-IDF oficiales usan config de 16 MB. |
 | Display | AMOLED 2.06", 410 x 502 | QSPI, 16-bit RGB565 en BSP. |
@@ -19,12 +20,14 @@ Fuentes usadas: wiki oficial Waveshare, repo oficial `waveshareteam/ESP32-S3-Tou
 | Audio out | `ES8311` | Codec para speaker, I2C control + I2S data. |
 | Audio in | `ES7210` | ADC/microfono, I2C control + I2S data. |
 | Storage | microSD | SDMMC 1-bit segun BSP. |
+| Bateria | LiPo 3.7 V por conector MX1.25 | Carga/gestion via AXP2101. |
+| Expansion | I2C, UART y USB pads | La wiki indica pads externos; confirmar pines en esquematico antes de usarlos. |
 
 ## BSP Oficial
 
 Componente recomendado: `waveshare/esp32_s3_touch_amoled_2_06`.
 
-Version observada: `1.0.6`.
+Version resuelta actual: `1.0.6` en `dependencies.lock`.
 
 Capacidades declaradas por el BSP:
 
@@ -39,7 +42,23 @@ Capacidades declaradas por el BSP:
 | SD card | `BSP_CAPS_SDCARD 1` |
 | IMU | `BSP_CAPS_IMU 0` |
 
-El BSP cubre display, touch, brillo, I2C, audio, SPIFFS y SD. No cubre IMU, RTC, PMU ni botones como APIs de alto nivel.
+El BSP cubre display, touch, brillo, I2C, audio y SD con macros de capacidad. Tambien tiene APIs/Kconfig para SPIFFS, aunque no declara `BSP_CAPS_SPIFFS`. No cubre IMU, RTC, PMU ni botones como APIs de alto nivel.
+
+## Defaults BSP Relevantes
+
+Estos valores vienen del `Kconfig` del BSP y conviene tratarlos como contrato practico del baseline:
+
+| Area | Valor | Nota |
+| --- | --- | --- |
+| I2C port | `CONFIG_BSP_I2C_NUM=1` | Bus compartido por touch, PMU, RTC, IMU y codecs. |
+| I2C speed | `CONFIG_BSP_I2C_CLK_SPEED_HZ=400000` | Fast mode por defecto. |
+| SPIFFS mount | `/spiffs` | Macro `BSP_SPIFFS_MOUNT_POINT`. |
+| SPIFFS partition | `storage` | Debe existir en `partitions.csv`. |
+| SPIFFS max files | `2` | Cambiar en `sdkconfig.defaults` si hace falta. |
+| SD mount | `/sdcard` | Macro `BSP_SD_MOUNT_POINT`. |
+| LVGL buffer height | `100` | `CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT`. |
+| RGB bounce height | `20` | Kconfig heredado; el panel real va por QSPI/SH8601. |
+| I2S port | `CONFIG_BSP_I2S_NUM=1` | Audio speaker/mic. |
 
 ## Pines Principales
 
@@ -59,6 +78,7 @@ El BSP cubre display, touch, brillo, I2C, audio, SPIFFS y SD. No cubre IMU, RTC,
 | SD D0 | GPIO3 | BSP |
 | SD CMD | GPIO1 | BSP |
 | SD CLK | GPIO2 | BSP |
+| SD CS | GPIO17 | Solo ejemplos Arduino/SPI-style; no usado por BSP SDMMC 1-bit. |
 | I2S MCLK | GPIO16 | BSP |
 | I2S SCLK/BCLK | GPIO41 | BSP |
 | I2S LCLK/WS | GPIO45 | BSP |
@@ -66,6 +86,7 @@ El BSP cubre display, touch, brillo, I2C, audio, SPIFFS y SD. No cubre IMU, RTC,
 | I2S DSIN | GPIO42 | BSP |
 | Speaker amp enable | GPIO46 | BSP |
 | BOOT button | GPIO0 | ESP32-S3 convention / ejemplo oficial |
+| PWR button | EXIO6 | Wiki; no es GPIO ESP32 directo documentado por BSP. |
 
 ## I2C Devices
 
@@ -78,7 +99,7 @@ Todos comparten `SDA=GPIO15` y `SCL=GPIO14` en el bus del BSP.
 | RTC | `PCF85063` | tipica `0x51` | No expuesto por BSP. |
 | PMU | `AXP2101` | tipica `0x34` | No expuesto por BSP; ejemplo oficial porta XPowersLib. |
 | Speaker codec | `ES8311` | `0x30` en `esp_codec_dev` | BSP lo usa en `bsp_audio_codec_speaker_init()`. |
-| Mic codec | `ES7210` | default del componente codec | BSP lo usa en `bsp_audio_codec_microphone_init()`. |
+| Mic codec | `ES7210` | `0x80` como default de `esp_codec_dev` | Verificar con I2C scan antes de tratarlo como direccion 7-bit de placa. |
 
 Antes de desarrollar drivers propios para RTC/PMU, conviene hacer un I2C scan en hardware real y anotar los resultados aqui.
 
@@ -87,10 +108,13 @@ Antes de desarrollar drivers propios para RTC/PMU, conviene hacer un I2C scan en
 Datos validados:
 
 - Resolucion BSP: `BSP_LCD_H_RES=410`, `BSP_LCD_V_RES=502`.
+- Brillo maximo anunciado: 600 nit.
 - Bus: QSPI por `SPI2_HOST`.
 - Formato BSP: RGB565, `LV_COLOR_FORMAT_RGB565` en LVGL 9.
 - Backlight real: no hay pin PWM; el brillo se controla con comando QSPI `0x51` y parametro `0x00..0xFF`.
 - API BSP: `bsp_display_start()`, `bsp_display_start_with_config()`, `bsp_display_backlight_on()`, `bsp_display_backlight_off()`, `bsp_display_brightness_set(percent)`.
+- `bsp_display_start()` termina llamando `bsp_display_brightness_init()`, que pone brillo al 100%; aplicar el brillo de la app despues de arrancar display.
+- La wiki indica que AMOLED/touch soportan funcionamiento a 40-60 grados C; alta temperatura + humedad pueden provocar polarizacion normal.
 
 Gotcha de controlador:
 
@@ -106,6 +130,12 @@ Gotcha de areas LVGL:
 ## Touch FT3168
 
 El touch se inicializa automaticamente al llamar `bsp_display_start()` porque el BSP registra el input device de LVGL.
+
+Datos de wiki:
+
+- Controlador `FT3168` de autocapacitancia.
+- Panel de cristal templado superficial + film.
+- I2C configurable entre 10 kHz y 400 kHz.
 
 APIs utiles:
 
@@ -157,6 +187,8 @@ Calibracion recomendada:
 
 La wiki identifica `PCF85063` y enlaza datasheet `PCF85063A`.
 
+El RTC esta conectado a la bateria via `AXP2101`, pensado para mantener hora cuando el resto de la placa no esta alimentado normalmente.
+
 Estado actual:
 
 - No esta expuesto por el BSP oficial.
@@ -181,6 +213,7 @@ Datos que puede reportar segun wiki/ejemplos:
 - Voltaje VBUS.
 - Voltaje de sistema.
 - Porcentaje estimado de bateria.
+- Power key / eventos `PKEY` mediante XPowersLib.
 
 Gotcha:
 
@@ -192,7 +225,31 @@ Estado actual:
 
 - No esta expuesto por el BSP oficial.
 - El ejemplo ESP-IDF oficial `01_AXP2101` porta `XPowersLib`.
+- El ejemplo ESP-IDF oficial usa `PMU_I2C_SDA=15`, `PMU_I2C_SCL=14`, direccion `0x34` y `PMU_INTERRUPT_PIN=-1`.
+- El ejemplo oficial llama `PMU.disableTSPinMeasure()` porque la placa no tiene deteccion de temperatura de bateria en TS; dejar TS activo puede causar carga anomala.
 - Si se integra, hacerlo como componente separado o driver minimo propio.
+
+Configuracion de carga vista en el ejemplo oficial:
+
+- Precharge: `XPOWERS_AXP2101_PRECHARGE_50MA`.
+- Corriente constante: `XPOWERS_AXP2101_CHG_CUR_400MA`.
+- Terminacion: `XPOWERS_AXP2101_CHG_ITERM_25MA`.
+- Tension objetivo: `XPOWERS_AXP2101_CHG_VOL_4V2`.
+
+## Bateria
+
+La placa trae conector/header LiPo `3.7 V MX1.25` para carga/descarga via `AXP2101`.
+
+Datos de FAQ/wiki:
+
+| Dato | Valor |
+| --- | --- |
+| Bateria recomendada | `4*27*28`, `400 mAh` |
+| Autonomia full brightness normal | aproximadamente 1 h |
+| Autonomia con pantalla apagada | aproximadamente 3-4 h |
+| Autonomia low-power maxima anunciada | aproximadamente 6 h |
+
+Las cifras son orientativas de Waveshare; validar con mediciones reales de la app final.
 
 ## Audio
 
@@ -215,6 +272,8 @@ Pines I2S relevantes:
 | DIN/DSIN | GPIO42 |
 | Amp enable | GPIO46 |
 
+La wiki confirma speaker integrado y microfono SMD. El FAQ menciona demos de dialogo de voz/AI sobre `ES8311` + microfono, pero este repo no activa todavia Wi-Fi/BLE/audio AI.
+
 ## microSD
 
 APIs BSP:
@@ -234,9 +293,31 @@ Pines:
 
 El BSP configura SDMMC 1-bit. No hay pin de card-detect declarado.
 
+Gotcha Arduino vs ESP-IDF:
+
+- La wiki/ejemplo Arduino etiqueta TF como SPI con `CS GPIO17`, `DI/MOSI GPIO1`, `DO/MISO GPIO3`, `SCK GPIO2`.
+- En ESP-IDF usar el BSP SDMMC 1-bit salvo que se porte codigo Arduino deliberadamente.
+- `GPIO17` no aparece en el BSP para SD; verificar en hardware/esquematico antes de usarlo.
+
 ## Botones Y Recuperacion
 
 - El BSP declara `BSP_CAPS_BUTTONS 0`.
-- `BOOT` esta en `GPIO0` y puede usarse como input propio si la app lo necesita.
-- El boton `PWR` esta relacionado con la PMU; tratarlo via `AXP2101` cuando se integre energia.
-- Si un firmware deja la placa en crash y USB no responde, la FAQ recomienda mantener `BOOT` y encender para forzar modo descarga.
+- `BOOT` esta en `GPIO0`, nivel bajo cuando se pulsa.
+- `BOOT` se puede usar en runtime para click, doble click, multi-click y long press si la app implementa debounce.
+- Mantener `BOOT` mientras se alimenta la placa fuerza modo descarga si el firmware se queda colgado.
+- `PWR` apaga si se mantiene pulsado unos 6 s en estado encendido.
+- `PWR` en apagado enciende la placa con una pulsacion.
+- En runtime, la wiki dice que `PWR` se lee por `EXIO6`, nivel alto al pulsar; no asumir `GPIO10` salvo validacion real.
+- Las pulsaciones largas de `PWR` para la app deben durar menos de 6 s para no apagar la placa.
+
+## Interfaces Externas
+
+La wiki indica que la placa saca pads/puertos externos para:
+
+| Interfaz | Uso previsto | Estado en este repo |
+| --- | --- | --- |
+| I2C | Expansion de sensores/perifericos | Confirmar pinout en esquematico antes de usar. |
+| UART | Conexion externa/debug | Confirmar pinout en esquematico antes de usar. |
+| USB pad | Conexion/debug | Confirmar pinout en esquematico antes de usar. |
+
+No documentar pines externos como definitivos hasta extraerlos del esquematico o medirlos en hardware.

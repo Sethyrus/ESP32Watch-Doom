@@ -24,7 +24,9 @@
 - The wiki and Arduino examples mention display controller `CO5300`, but the official ESP-IDF BSP uses `waveshare/esp_lcd_sh8601`. Treat the BSP as source of truth for ESP-IDF work.
 - Display brightness is controlled by command `0x51` over QSPI (`0x00..0xFF`), exposed as `bsp_display_brightness_set(percent)`.
 - LVGL is not thread-safe. Wrap all `lv_*` calls made outside LVGL callbacks/tasks with `bsp_display_lock()` and `bsp_display_unlock()`.
-- The BSP declares no IMU or button support. Use `waveshare/qmi8658` for IMU and custom code for BOOT GPIO0, RTC PCF85063, and PMU AXP2101.
+- The BSP declares no IMU or button support. Use `waveshare/qmi8658` for IMU and custom code/components for BOOT GPIO0, RTC PCF85063, and PMU AXP2101.
+- Do not assume PWR is a direct ESP32 GPIO. The wiki says PWR is readable through `EXIO6`, high when pressed, and holding it around 6s powers off the board.
+- For microSD in ESP-IDF use BSP SDMMC 1-bit (`CLK GPIO2`, `CMD GPIO1`, `D0 GPIO3`). `GPIO17` appears only in Arduino SPI-style SD examples.
 - QMI8658 default accel units are milli-g. If using screen physics, normalize and map axes as `screen_x = -accelY / 1000.0f`, `screen_y = accelX / 1000.0f` unless m/s2 mode is enabled.
 
 ## Documentation Map
@@ -33,3 +35,5 @@
 - `docs/SETUP.md`: ESP-IDF 5.5.4 setup, build/flash, config files and dependencies.
 - `docs/GOTCHAS.md`: known pitfalls and implementation cautions.
 - `docs/ARCHITECTURE.md`: LVGL+BSP decision, component layout and Brookesia criteria.
+- `docs/BRINGUP.md`: hardware validation checklist before building apps.
+- `docs/SOURCES.md`: official links, datasheets, examples and local references.

@@ -16,6 +16,9 @@
 # Log files
 *.log
 
+# Captured web pages used during research
+docs/docs_htmls/
+
 # Build artifacts and directories
 **/build/
 build/

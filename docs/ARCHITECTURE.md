@@ -76,11 +76,42 @@ La app no deberia hablar directamente con todos los registros de hardware una ve
 - `storage_service`: NVS, SPIFFS y SD.
 - `audio_service`: speaker/mic sobre BSP codec APIs.
 
+Antes de crear servicios permanentes, completar o actualizar `docs/BRINGUP.md` con resultados reales de hardware. No convertir suposiciones de wiki en APIs definitivas sin validacion si afectan energia, botones, bateria o pinout externo.
+
+## Entrada Y Energia
+
+Reglas iniciales:
+
+- `BOOT` puede ser input directo por `GPIO0`, activo bajo.
+- `PWR` debe tratarse como evento de PMU/EXIO hasta validar ruta exacta; no usar `GPIO10` por arrastre de experimentos previos.
+- El long press de `PWR` cercano a 6 s apaga la placa, asi que la UX no debe depender de mantenerlo pulsado demasiado tiempo.
+- Toda politica de sleep, dimming o wake debe vivir en `power_service`, no dispersa en pantallas/apps.
+
+## Persistencia
+
+Usar NVS para preferencias pequenas y SPIFFS/SD para datos medianos o assets.
+
+Datos candidatos para NVS:
+
+- Brillo.
+- Tema/UI actual.
+- Ultima app/pantalla.
+- Calibracion IMU.
+- Config simple de reloj/alarma.
+
+Datos candidatos para SPIFFS/SD:
+
+- Recursos grandes, fuentes, imagenes y audio.
+- Logs largos o datos exportables.
+- Video/AVI si se porta el ejemplo `06_videoplayer`.
+
 ## Configuracion Durable
 
 Todo cambio de Kconfig debe ir a `sdkconfig.defaults`. Toda decision de particiones debe ir a `partitions.csv`.
 
 No depender de `sdkconfig` para estado del proyecto.
+
+Si se introducen OTA, coredumps o assets grandes en flash, redisenar `partitions.csv` antes de escribir codigo que dependa de offsets/tamanos.
 
 ## DESIGN.md
 

@@ -70,8 +70,23 @@ Decisiones del baseline:
 - FreeRTOS tick: 1000 Hz.
 - LVGL: v9.3.0 por manifest, con malloc/string/sprintf de libc.
 - BSP: `waveshare/esp32_s3_touch_amoled_2_06`.
+- BSP I2C: port 1, 400 kHz.
+- Mounts BSP: SPIFFS `/spiffs`, SD `/sdcard`.
 
 Nota sobre flash: la wiki indica 32 MB, pero los ejemplos ESP-IDF oficiales Waveshare usan 16 MB. Este repo arranca con 16 MB por compatibilidad con esos ejemplos. Si se quiere usar todo el flash, verificar primero con `esptool.py flash_id` y cambiar a `CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y`.
+
+## Particiones
+
+La tabla actual es single-factory y no tiene OTA slots:
+
+| Particion | Tipo | Tamano | Uso |
+| --- | --- | --- | --- |
+| `nvs` | data/nvs | `0x6000` | Config pequena, calibraciones, preferencias. |
+| `phy_init` | data/phy | `0x1000` | Datos PHY ESP-IDF. |
+| `factory` | app/factory | `8M` | Firmware principal. |
+| `storage` | data/spiffs | `7M` | SPIFFS montado por BSP como `/spiffs`. |
+
+No hay particion de coredump ni OTA. Si se necesita OTA, crash dumps persistentes o assets grandes en flash, redisenar `partitions.csv` antes de construir muchas apps.
 
 ## VS Code
 
@@ -105,6 +120,21 @@ Para anadir perifericos:
 - IMU: anadir `waveshare/qmi8658`.
 - RTC/PMU: preferir componentes separados o driver propio minimo; no mezclar todo en `main/main.c`.
 
+## Ejemplos Oficiales Waveshare
+
+El repo oficial de Waveshare contiene ejemplos ESP-IDF bajo `examples/ESP-IDF-v5.4.2`. Se usan como referencia, pero este proyecto queda fijado en ESP-IDF `5.5.4`.
+
+| Ejemplo | Valor para este repo |
+| --- | --- |
+| `01_AXP2101` | Referencia PMU/bateria/carga con XPowersLib. |
+| `02_lvgl_demo_v9` | Referencia LVGL+BSP, particiones 8M app + 7M SPIFFS. |
+| `03_esp-brookesia` | Referencia futura si se adopta framework de apps. |
+| `04_Immersive_block` | Referencia IMU QMI8658 + fisicas LVGL. |
+| `05_Spec_Analyzer` | Referencia microfono/audio capture + visualizacion. |
+| `06_videoplayer` | Referencia AVI desde TF con audio; requiere assets en SD. |
+
+No copiar ejemplos completos al repo salvo que se porten conscientemente. Preferir extraer drivers o patrones minimos.
+
 ## Problemas Frecuentes
 
 `idf.py` no existe:
@@ -127,4 +157,4 @@ Falla por componentes antiguos o cacheados:
 idf.py reconfigure
 ```
 
-Si sigue fallando por cache de build, borrar `build/` manualmente o desde el IDE. No borrar cambios fuente.
+Si sigue fallando por cache de build, borrar `build/` manualmente o desde el IDE. Si se sospecha resolucion vieja de componentes, borrar tambien `managed_components/` y regenerar. `dependencies.lock` solo debe actualizarse si se aceptan nuevas versiones resueltas. No borrar cambios fuente.
