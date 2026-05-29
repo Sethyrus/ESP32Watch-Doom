@@ -83,7 +83,7 @@ Antes de crear servicios permanentes, completar o actualizar `docs/BRINGUP.md` c
 Reglas iniciales:
 
 - `BOOT` puede ser input directo por `GPIO0`, activo bajo.
-- `PWR` debe tratarse como evento de PMU/EXIO hasta validar ruta exacta; no usar `GPIO10` por arrastre de experimentos previos.
+- `PWR` debe tratarse como evento de PMU/EXIO: el esquematico lo lleva a `PWRON` del AXP2101 y la wiki habla de `EXIO6`; no usar `SYS_OUT/GPIO10` por arrastre de experimentos previos.
 - El long press de `PWR` cercano a 6 s apaga la placa, asi que la UX no debe depender de mantenerlo pulsado demasiado tiempo.
 - Toda politica de sleep, dimming o wake debe vivir en `power_service`, no dispersa en pantallas/apps.
 

@@ -61,7 +61,7 @@ Ruta oficial: `examples/ESP-IDF-v5.4.2` en el repo Waveshare. Este repo usa ESP-
 | `02_lvgl_demo_v9` | LVGL v9 + BSP, particiones 8M factory + 7M SPIFFS. |
 | `03_esp-brookesia` | Demo Brookesia phone framework. |
 | `04_Immersive_block` | QMI8658 + LVGL + fisicas de inclinacion. |
-| `05_Spec_Analyzer` | Captura de microfono/audio y visualizacion de espectro. |
+| `05_Spec_Analyzer` | Captura de microfonos/audio y visualizacion de espectro. |
 | `06_videoplayer` | AVI desde TF card con video MJPEG y audio PCM. |
 
 ## Ejemplos Arduino
@@ -80,18 +80,24 @@ Usarlos solo como referencia secundaria para comportamiento de hardware, no como
 
 | Ruta | Uso |
 | --- | --- |
+| `/Users/alex/Proyectos/Alex/ESP32/ESP32-S3-Touch-AMOLED-2.06/Schematic/ESP32-S3-Touch-AMOLED-2.06-Schematic-V1.0.pdf` | Esquematico V1.0 usado para pines no BSP, rails PMU, flash y direcciones I2C. |
+| `/Users/alex/Proyectos/Alex/ESP32/ESP32-S3-Touch-AMOLED-2.06/examples/ESP-IDF-v5.4.2/01_AXP2101/` | Referencia local PMU AXP2101, XPowersLib, PKEY, carga y TS pin. |
+| `/Users/alex/Proyectos/Alex/ESP32/ESP32-S3-Touch-AMOLED-2.06/examples/ESP-IDF-v5.4.2/04_Immersive_block/` | Referencia local IMU QMI8658, BOOT GPIO0 y fisicas LVGL. |
+| `/Users/alex/Proyectos/Alex/ESP32/ESP32-S3-Touch-AMOLED-2.06/examples/ESP-IDF-v5.4.2/05_Spec_Analyzer/` | Referencia local audio capture ES7210 + FFT sobre BSP. |
+| `/Users/alex/Proyectos/Alex/ESP32/ESP32-S3-Touch-AMOLED-2.06/examples/ESP-IDF-v5.4.2/06_videoplayer/` | Referencia local SD + AVI + audio playback. |
 | `/Users/alex/Proyectos/Alex/ESP32/MyESP32S3Watch/LEARNINGS_AND_GUIDE.md` | Lecciones Brookesia, QMI8658, LVGL performance y registro estatico. |
 | `/Users/alex/Proyectos/Alex/ESP32/MyESP32S3Watch/POKETCH_DESIGN.md` | Diseno Poketch y decision de motor LVGL ligero. |
 | `managed_components/waveshare__esp32_s3_touch_amoled_2_06/` | Codigo BSP resuelto localmente tras build. Generado, no editar. |
+| `managed_components/waveshare__esp_lcd_sh8601/` | Driver panel SH8601 resuelto; confirma QSPI, comando `0x51` y restricciones de area. |
 | `dependencies.lock` | Versiones exactas resueltas por ESP Component Manager. |
 
 ## Informacion Ya Sintetizada
 
-La captura local de la wiki fue usada para extraer datos a estos documentos:
+La wiki, el repo oficial, el esquematico local, el BSP resuelto y el proyecto previo fueron usados para extraer datos a estos documentos:
 
 | Documento | Contenido extraido |
 | --- | --- |
-| `docs/HARDWARE.md` | Piezas, pines, buses, sensores, PMU, bateria, botones, SD, audio, BSP. |
-| `docs/GOTCHAS.md` | Recovery, flash, PWR, bateria, SD GPIO17, LVGL, BSP caveats. |
+| `docs/HARDWARE.md` | Piezas, pines, buses, sensores, rails PMU, bateria, botones, SD, audio, BSP. |
+| `docs/GOTCHAS.md` | Recovery, flash, PWR, bateria, SD GPIO17, ES7210 scan, LVGL, BSP caveats. |
 | `docs/SETUP.md` | Setup ESP-IDF, particiones, dependencias y ejemplos oficiales. |
 | `docs/BRINGUP.md` | Checklist de validacion hardware. |

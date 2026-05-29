@@ -11,17 +11,17 @@ Fuentes usadas: wiki oficial Waveshare, repo oficial `waveshareteam/ESP32-S3-Tou
 | MCU | `ESP32-S3R8` | Dual-core LX7, hasta 240 MHz. |
 | Wireless | Wi-Fi 2.4 GHz + Bluetooth LE 5 | Antena SMD integrada segun wiki. |
 | PSRAM | 8 MB octal | Necesaria para LVGL fluido y buffers de display. |
-| Flash | 32 MB segun wiki | Los ejemplos ESP-IDF oficiales usan config de 16 MB. |
+| Flash | 32 MB segun wiki y esquematico | Chip `GD25Q256EYIGR` = 256 Mbit; los ejemplos ESP-IDF oficiales usan config de 16 MB. |
 | Display | AMOLED 2.06", 410 x 502 | QSPI, 16-bit RGB565 en BSP. |
 | Touch | `FT3168` | I2C; BSP usa driver compatible `FT5x06`. |
 | IMU | `QMI8658` | Acelerometro + giroscopio 6 ejes, I2C. |
 | RTC | `PCF85063` | I2C, alimentado por bateria via PMU. |
 | PMU | `AXP2101` | Gestion de bateria/carga/voltajes, I2C. |
 | Audio out | `ES8311` | Codec para speaker, I2C control + I2S data. |
-| Audio in | `ES7210` | ADC/microfono, I2C control + I2S data. |
+| Audio in | `ES7210` | ADC para doble microfono, I2C control + I2S data. |
 | Storage | microSD | SDMMC 1-bit segun BSP. |
 | Bateria | LiPo 3.7 V por conector MX1.25 | Carga/gestion via AXP2101. |
-| Expansion | I2C, UART y USB pads | La wiki indica pads externos; confirmar pines en esquematico antes de usarlos. |
+| Expansion | I2C, UART y USB pads | Ver `Interfaces Externas`; validar continuidad antes de disenar accesorios. |
 
 ## BSP Oficial
 
@@ -73,8 +73,11 @@ Estos valores vienen del `Kconfig` del BSP y conviene tratarlos como contrato pr
 | LCD DATA2 | GPIO6 | BSP |
 | LCD DATA3 | GPIO7 | BSP |
 | LCD RST | GPIO8 | BSP |
+| LCD TE | GPIO13 | Esquematico; no usado directamente por BSP v1.0.6. |
 | Touch RST | GPIO9 | BSP |
 | Touch INT | GPIO38 | BSP |
+| QMI8658 INT1 | GPIO21 | Esquematico; no expuesto por BSP. |
+| RTC INT | GPIO39 | Esquematico; no expuesto por BSP. |
 | SD D0 | GPIO3 | BSP |
 | SD CMD | GPIO1 | BSP |
 | SD CLK | GPIO2 | BSP |
@@ -85,8 +88,25 @@ Estos valores vienen del `Kconfig` del BSP y conviene tratarlos como contrato pr
 | I2S DOUT | GPIO40 | BSP |
 | I2S DSIN | GPIO42 | BSP |
 | Speaker amp enable | GPIO46 | BSP |
+| Motor | GPIO18 | Esquematico; driver/transistor de motor, no expuesto por BSP. |
+| SYS_OUT | GPIO10 | Esquematico; ruta de sistema/PMU, no tratar como GPIO libre sin validar. |
 | BOOT button | GPIO0 | ESP32-S3 convention / ejemplo oficial |
-| PWR button | EXIO6 | Wiki; no es GPIO ESP32 directo documentado por BSP. |
+| PWR button | AXP2101 `PWRON`, wiki `EXIO6` | No es GPIO ESP32 directo documentado por BSP. |
+
+## Pines De Esquematico Sin Wrapper BSP
+
+Estos pines o nets aparecen en el esquematico oficial, pero no tienen API de alto nivel en el BSP `waveshare/esp32_s3_touch_amoled_2_06` v1.0.6. Usarlos requiere validar en hardware real y revisar si la funcion comparte bus, rail o comportamiento de alimentacion.
+
+| Senal / pad | Pin o net | Uso probable | Cuidado |
+| --- | --- | --- | --- |
+| Motor | `GPIO18` | Motor/vibracion por transistor | Validar corriente, driver y polaridad antes de activar. |
+| QMI8658 INT1 | `GPIO21` | Interrupcion IMU | El driver recomendado puede funcionar por polling; no asumir IRQ configurada. |
+| RTC INT | `GPIO39` | Alarma/interrupcion PCF85063 | Requiere driver RTC propio y configuracion de GPIO input. |
+| LCD TE | `GPIO13` | Tearing-effect del panel | El BSP no lo usa directamente; no activar anti-tearing suponiendo TE conectado al driver. |
+| SYS_OUT | `GPIO10` / `SYS_OUT` | Net de sistema/PMU | No tratar como GPIO libre ni como PWR; validar antes de usar. |
+| USB pads | `D+/IO20`, `D-/IO19`, `VBUS`, `GND` | USB nativo externo/debug | Compartido con USB del ESP32-S3. |
+| I2C pads | `IO15` SDA, `IO14` SCL, `3V3`, `GND` | Expansion I2C | Mismo bus que touch, PMU, RTC, IMU y codecs. |
+| UART pads | `RXD/U0RXD`, `TXD/U0TXD`, `3V3`, `GND` | Serial externo/debug | Revisar configuracion de consola antes de reutilizar. |
 
 ## I2C Devices
 
@@ -99,9 +119,9 @@ Todos comparten `SDA=GPIO15` y `SCL=GPIO14` en el bus del BSP.
 | RTC | `PCF85063` | tipica `0x51` | No expuesto por BSP. |
 | PMU | `AXP2101` | tipica `0x34` | No expuesto por BSP; ejemplo oficial porta XPowersLib. |
 | Speaker codec | `ES8311` | `0x30` en `esp_codec_dev` | BSP lo usa en `bsp_audio_codec_speaker_init()`. |
-| Mic codec | `ES7210` | `0x80` como default de `esp_codec_dev` | Verificar con I2C scan antes de tratarlo como direccion 7-bit de placa. |
+| Mic ADC | `ES7210` | `0x40` 7-bit en esquematico | `esp_codec_dev` usa macro `ES7210_CODEC_DEFAULT_ADDR=0x80`; para I2C scan esperar `0x40`. |
 
-Antes de desarrollar drivers propios para RTC/PMU, conviene hacer un I2C scan en hardware real y anotar los resultados aqui.
+Antes de desarrollar drivers propios para RTC/PMU/audio, conviene hacer un I2C scan en hardware real y anotar los resultados aqui. Interpretar el scan como direcciones 7-bit.
 
 ## Display AMOLED
 
@@ -112,6 +132,8 @@ Datos validados:
 - Bus: QSPI por `SPI2_HOST`.
 - Formato BSP: RGB565, `LV_COLOR_FORMAT_RGB565` en LVGL 9.
 - Backlight real: no hay pin PWM; el brillo se controla con comando QSPI `0x51` y parametro `0x00..0xFF`.
+- Offset de panel en BSP: `esp_lcd_panel_set_gap(panel_handle, 0x16, 0)`. Si se reemplaza el BSP, mantener este ajuste o validar visualmente el origen X.
+- LCD TE: el esquematico conecta `LCD_TE` a `GPIO13`, pero el BSP v1.0.6 no lo usa directamente en la ruta LVGL actual.
 - API BSP: `bsp_display_start()`, `bsp_display_start_with_config()`, `bsp_display_backlight_on()`, `bsp_display_backlight_off()`, `bsp_display_brightness_set(percent)`.
 - `bsp_display_start()` termina llamando `bsp_display_brightness_init()`, que pone brillo al 100%; aplicar el brillo de la app despues de arrancar display.
 - La wiki indica que AMOLED/touch soportan funcionamiento a 40-60 grados C; alta temperatura + humedad pueden provocar polarizacion normal.
@@ -193,6 +215,7 @@ Estado actual:
 
 - No esta expuesto por el BSP oficial.
 - Los ejemplos Arduino usan `SensorPCF85063`/SensorLib.
+- El esquematico conecta `RTC_INT` a `GPIO39`.
 - Para ESP-IDF se puede crear un driver minimo por I2C si solo necesitamos fecha/hora.
 
 Usos previstos:
@@ -227,6 +250,7 @@ Estado actual:
 - El ejemplo ESP-IDF oficial `01_AXP2101` porta `XPowersLib`.
 - El ejemplo ESP-IDF oficial usa `PMU_I2C_SDA=15`, `PMU_I2C_SCL=14`, direccion `0x34` y `PMU_INTERRUPT_PIN=-1`.
 - El ejemplo oficial llama `PMU.disableTSPinMeasure()` porque la placa no tiene deteccion de temperatura de bateria en TS; dejar TS activo puede causar carga anomala.
+- El esquematico conecta el boton `PWR` al `PWRON` del AXP2101; la wiki describe lectura logica por `EXIO6`.
 - Si se integra, hacerlo como componente separado o driver minimo propio.
 
 Configuracion de carga vista en el ejemplo oficial:
@@ -235,6 +259,26 @@ Configuracion de carga vista en el ejemplo oficial:
 - Corriente constante: `XPOWERS_AXP2101_CHG_CUR_400MA`.
 - Terminacion: `XPOWERS_AXP2101_CHG_ITERM_25MA`.
 - Tension objetivo: `XPOWERS_AXP2101_CHG_VOL_4V2`.
+
+Mapa de rails visto en el esquematico:
+
+| Rail AXP2101 | Net / uso en placa |
+| --- | --- |
+| `DCDC1` | `VCC3V3` |
+| `DCDC2` | `0.9 V` |
+| `DCDC3` | `1.2 V` |
+| `DCDC4` | `1.8 V` |
+| `DCDC5` | `NC` |
+| `RTCLDO` | `VCC-RTC` |
+| `ALDO1` | `VL1_3.3V` |
+| `ALDO2` | `VL2_3.3V` |
+| `ALDO3` | `VCC3V` |
+| `ALDO4` | `VL3_1.8V` |
+| `BLDO1` | Sin uso claro en el texto extraido; revisar esquematico antes de tocar. |
+| `BLDO2` | `VL_2.8V` |
+| `CPUSLDO` | `VCL_1.2V` |
+
+No copiar el ejemplo `01_AXP2101` como politica de energia final sin revisar estos rails. El ejemplo desactiva varios canales para demostrar la PMU y despues reactiva un subconjunto; una app real puede necesitar mantener activos display, touch, codecs, RTC o sensores.
 
 ## Bateria
 
@@ -253,6 +297,8 @@ Las cifras son orientativas de Waveshare; validar con mediciones reales de la ap
 
 ## Audio
 
+La placa integra speaker/amplificador y dos microfonos SMD. En ESP-IDF el BSP expone el speaker mediante `ES8311` y la captura de microfono mediante `ES7210`.
+
 APIs BSP:
 
 ```c
@@ -270,9 +316,9 @@ Pines I2S relevantes:
 | WS/LCLK | GPIO45 |
 | DOUT | GPIO40 |
 | DIN/DSIN | GPIO42 |
-| Amp enable | GPIO46 |
+| Amp enable / PA_CTRL | GPIO46 |
 
-La wiki confirma speaker integrado y microfono SMD. El FAQ menciona demos de dialogo de voz/AI sobre `ES8311` + microfono, pero este repo no activa todavia Wi-Fi/BLE/audio AI.
+El ejemplo oficial `05_Spec_Analyzer` usa el BSP para inicializar speaker y microfono, configura captura a 16 kHz, 16-bit, 2 canales y procesa FFT. El ejemplo `06_videoplayer` reutiliza audio para reproducir AVI desde SD. Este repo no activa todavia Wi-Fi/BLE/audio AI.
 
 ## microSD
 
@@ -307,17 +353,18 @@ Gotcha Arduino vs ESP-IDF:
 - Mantener `BOOT` mientras se alimenta la placa fuerza modo descarga si el firmware se queda colgado.
 - `PWR` apaga si se mantiene pulsado unos 6 s en estado encendido.
 - `PWR` en apagado enciende la placa con una pulsacion.
-- En runtime, la wiki dice que `PWR` se lee por `EXIO6`, nivel alto al pulsar; no asumir `GPIO10` salvo validacion real.
+- En runtime, la wiki dice que `PWR` se lee por `EXIO6`, nivel alto al pulsar; el esquematico muestra el boton en la ruta `PWRON` del AXP2101.
+- No asumir `GPIO10` como PWR: el esquematico lo etiqueta como `SYS_OUT/GPIO10`, ruta de sistema/PMU que requiere validacion propia.
 - Las pulsaciones largas de `PWR` para la app deben durar menos de 6 s para no apagar la placa.
 
 ## Interfaces Externas
 
-La wiki indica que la placa saca pads/puertos externos para:
+La wiki indica que la placa saca pads/puertos externos. El esquematico y el silk/diagrama extraido muestran:
 
-| Interfaz | Uso previsto | Estado en este repo |
-| --- | --- | --- |
-| I2C | Expansion de sensores/perifericos | Confirmar pinout en esquematico antes de usar. |
-| UART | Conexion externa/debug | Confirmar pinout en esquematico antes de usar. |
-| USB pad | Conexion/debug | Confirmar pinout en esquematico antes de usar. |
+| Interfaz | Pads / pines | Uso previsto | Cuidado |
+| --- | --- | --- | --- |
+| I2C | `IO15` SDA, `IO14` SCL, `3V3`, `GND` | Expansion de sensores/perifericos | Es el bus compartido del BSP. |
+| UART | `RXD/U0RXD`, `TXD/U0TXD`, `3V3`, `GND` | Conexion externa/debug | Revisar consola y uso de UART0 antes de reutilizar. |
+| USB pad | `D+/IO20`, `D-/IO19`, `VBUS`, `GND` | Conexion/debug USB nativo | Compartido con USB del ESP32-S3. |
 
-No documentar pines externos como definitivos hasta extraerlos del esquematico o medirlos en hardware.
+Aunque estos pads ya salen del esquematico, validar continuidad y funcion en la placa real antes de disenar accesorios o asumir tolerancia electrica.

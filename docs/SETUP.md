@@ -73,7 +73,7 @@ Decisiones del baseline:
 - BSP I2C: port 1, 400 kHz.
 - Mounts BSP: SPIFFS `/spiffs`, SD `/sdcard`.
 
-Nota sobre flash: la wiki indica 32 MB, pero los ejemplos ESP-IDF oficiales Waveshare usan 16 MB. Este repo arranca con 16 MB por compatibilidad con esos ejemplos. Si se quiere usar todo el flash, verificar primero con `esptool.py flash_id` y cambiar a `CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y`.
+Nota sobre flash: la wiki y el esquematico indican 32 MB (`GD25Q256EYIGR`), pero los ejemplos ESP-IDF oficiales Waveshare usan 16 MB. Este repo arranca con 16 MB por compatibilidad con esos ejemplos. Si se quiere usar todo el flash, verificar primero con `esptool.py flash_id` y cambiar a `CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y`.
 
 ## Particiones
 
@@ -130,7 +130,7 @@ El repo oficial de Waveshare contiene ejemplos ESP-IDF bajo `examples/ESP-IDF-v5
 | `02_lvgl_demo_v9` | Referencia LVGL+BSP, particiones 8M app + 7M SPIFFS. |
 | `03_esp-brookesia` | Referencia futura si se adopta framework de apps. |
 | `04_Immersive_block` | Referencia IMU QMI8658 + fisicas LVGL. |
-| `05_Spec_Analyzer` | Referencia microfono/audio capture + visualizacion. |
+| `05_Spec_Analyzer` | Referencia microfonos/audio capture + visualizacion. |
 | `06_videoplayer` | Referencia AVI desde TF con audio; requiere assets en SD. |
 
 No copiar ejemplos completos al repo salvo que se porten conscientemente. Preferir extraer drivers o patrones minimos.

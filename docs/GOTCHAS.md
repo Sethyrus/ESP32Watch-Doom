@@ -28,7 +28,7 @@ CONFIG_SPIRAM_SPEED_80M=y
 
 ## Flash: Wiki 32 MB, Ejemplos 16 MB
 
-La wiki anuncia 32 MB de flash, pero los ejemplos ESP-IDF oficiales de Waveshare usan `CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y`.
+La wiki anuncia 32 MB de flash y el esquematico monta `GD25Q256EYIGR` (256 Mbit / 32 MB), pero los ejemplos ESP-IDF oficiales de Waveshare usan `CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y`.
 
 Este repo arranca con 16 MB por compatibilidad. Para usar 32 MB, verificar primero la placa real con `esptool.py flash_id`.
 
@@ -61,6 +61,12 @@ El BSP tiene comentarios heredados de otros paneles/placas. Priorizar el codigo 
 - `bsp_display_start_with_config()` recibe `bsp_display_cfg_t`, pero el codigo actual calcula el buffer LVGL desde Kconfig (`CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT` o full-screen si avoid-tear), no desde todos los campos del struct.
 - Las opciones/ayudas Kconfig mencionan RGB LCD y LEDC PWM, pero esta placa usa panel QSPI `SH8601` y brillo por comando `0x51`.
 - El header I2C menciona dispositivos QMA7981/OV2640, pero en esta placa los dispositivos relevantes son FT3168, QMI8658, PCF85063, AXP2101 y codecs.
+- El BSP aplica `esp_lcd_panel_set_gap(panel_handle, 0x16, 0)` al panel. Si se reemplaza la ruta de display, no olvidar validar el offset X.
+- `LCD_TE` existe en el esquematico como `GPIO13`, pero el BSP v1.0.6 no lo usa directamente en su ruta LVGL.
+
+## ES7210: `0x40` En Scan, `0x80` En Macro
+
+El esquematico marca el ES7210 como `0x40` 7-bit. `esp_codec_dev` define `ES7210_CODEC_DEFAULT_ADDR` como `0x80`, que se usa en la API del codec. Para un I2C scan normal, esperar `0x40`.
 
 ## LVGL No Es Thread-Safe
 
@@ -98,20 +104,25 @@ Centralizar el mapeo en una sola funcion para evitar aplicar doble inversion en 
 
 Aunque la placa los tiene, `BSP_CAPS_IMU` y `BSP_CAPS_BUTTONS` son 0. Para IMU usar `waveshare/qmi8658`; para RTC/PMU crear componente propio o portar lo minimo de los ejemplos oficiales. Para botones, `BOOT` es GPIO0, pero `PWR` aparece en wiki como `EXIO6`, no como GPIO directo del ESP32-S3.
 
+Pines utiles del esquematico que tampoco son APIs BSP: motor `GPIO18`, QMI INT `GPIO21`, RTC INT `GPIO39`, LCD TE `GPIO13`, `SYS_OUT/GPIO10` y pads externos USB/I2C/UART. Validar antes de usarlos.
+
 ## PWR Puede Apagar La Placa
 
 El boton `PWR` tiene comportamiento de alimentacion ademas de posible input de usuario.
 
 - Pulsado unos 6 s en encendido apaga la placa.
 - Pulsacion en apagado enciende la placa.
-- En runtime la wiki dice que se lee por `EXIO6` con nivel alto al pulsar.
+- En runtime la wiki dice que se lee por `EXIO6` con nivel alto al pulsar; el esquematico muestra el boton en `PWRON` del AXP2101.
+- No usar `GPIO10` como sustituto de PWR: el esquematico lo etiqueta como `SYS_OUT/GPIO10`, una ruta de sistema/PMU que requiere validacion propia.
 - No implementar long-press de app cercano a 6 s sin gestionar el riesgo de apagado.
 
-## AXP2101: Porcentaje De Bateria No Lineal
+## AXP2101: Porcentaje Y Rails
 
 La wiki avisa que el porcentaje estimado puede fluctuar, especialmente con cargador conectado, cambios de carga o envejecimiento de bateria. Preferir voltaje y tendencia para decisiones importantes.
 
 El ejemplo ESP-IDF oficial llama `PMU.disableTSPinMeasure()` porque la placa no tiene medida de temperatura de bateria por TS; dejar esa deteccion activa puede causar carga anomala.
+
+No copiar el ejemplo `01_AXP2101` como politica final de energia sin revisar rails. El esquematico asigna `DCDC1` a `VCC3V3`, `DCDC2` a `0.9V`, `DCDC3` a `1.2V`, `DCDC4` a `1.8V`, `RTCLDO` a `VCC-RTC`, `ALDO1/ALDO2` a rails de 3.3 V, `ALDO4` a 1.8 V y `BLDO2` a 2.8 V. Apagar canales a ciegas puede cortar display, touch, sensores, RTC o audio.
 
 ## Seguridad De Bateria Y Agua
 

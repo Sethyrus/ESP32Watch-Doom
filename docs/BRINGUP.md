@@ -36,7 +36,7 @@ Salir de monitor: `Ctrl+]`.
 
 ## Flash Real
 
-La wiki indica 32 MB, pero ejemplos oficiales usan 16 MB. Antes de usar particiones de 32 MB:
+La wiki y el esquematico indican 32 MB (`GD25Q256EYIGR`, 256 Mbit), pero ejemplos oficiales usan 16 MB. Antes de usar particiones de 32 MB:
 
 ```sh
 esptool.py -p /dev/tty.usbmodem21301 flash_id
@@ -65,7 +65,7 @@ Direcciones esperadas:
 | PCF85063 RTC | `0x51` tipica | Pendiente |
 | AXP2101 PMU | `0x34` | Pendiente |
 | ES8311 speaker codec | `0x30` | Pendiente |
-| ES7210 mic codec | Verificar | Pendiente |
+| ES7210 mic ADC | `0x40` 7-bit (`0x80` macro en `esp_codec_dev`) | Pendiente |
 
 Si falta un dispositivo, comprobar alimentacion/PMU antes de asumir fallo del sensor.
 
@@ -79,8 +79,10 @@ Validar:
 | Orientacion | Portrait por BSP; rotacion solo si la app lo decide. |
 | Color | RGB565 correcto, sin swap visual. |
 | Refresco | Sin areas corruptas; el BSP ya redondea invalidate areas. |
+| Offset | Origen correcto con gap BSP `0x16, 0`. |
 | Locking | Toda modificacion desde tareas FreeRTOS usa `bsp_display_lock()`. |
 | Brillo | 0 apaga/dim, 100 maximo; control por comando `0x51`, no PWM. |
+| TE | `LCD_TE GPIO13` existe en esquematico, pero BSP v1.0.6 no lo usa directamente. |
 
 ## Touch
 
@@ -125,6 +127,7 @@ Pendiente de driver propio/minimo. Validar primero por I2C scan.
 | --- | --- |
 | Direccion | `0x51` tipica. |
 | Persistencia | Mantiene hora con bateria si PMU/RTC estan bien alimentados. |
+| Interrupcion | `RTC_INT GPIO39` segun esquematico. |
 | API futura | `rtc_service` o componente propio, no en `main.c`. |
 
 ## PMU AXP2101
@@ -140,6 +143,7 @@ Validar:
 | Porcentaje | Solo orientativo; preferir voltage/tendencia. |
 | TS pin | Llamar equivalente a `disableTSPinMeasure()` si se usa XPowersLib. |
 | PKEY | Usar para `PWR` si se decide integrar power key. |
+| Rails | No copiar `01_AXP2101` sin revisar mapa de rails en `docs/HARDWARE.md`. |
 
 No implementar politica de sleep/bateria antes de entender bien PWR/PMU.
 
@@ -148,9 +152,24 @@ No implementar politica de sleep/bateria antes de entender bien PWR/PMU.
 | Boton | Ruta esperada | Validacion |
 | --- | --- | --- |
 | BOOT | `GPIO0`, bajo al pulsar | Debounce, click/long press, recovery. |
-| PWR | `EXIO6`, alto al pulsar segun wiki | Validar via PMU/expander; no asumir GPIO10. |
+| PWR | AXP2101 `PWRON`; `EXIO6` alto al pulsar segun wiki | Validar via PMU/expander; no asumir GPIO10. |
 
 Regla: no usar long press de `PWR` cercano a 6 s para funciones de app porque apaga la placa.
+
+## Pines Sin Wrapper BSP
+
+Validar solo cuando se necesiten:
+
+| Senal | Pin/net | Resultado |
+| --- | --- | --- |
+| Motor | `GPIO18` | Pendiente |
+| QMI8658 INT1 | `GPIO21` | Pendiente |
+| RTC INT | `GPIO39` | Pendiente |
+| LCD TE | `GPIO13` | Pendiente |
+| SYS_OUT | `GPIO10` / `SYS_OUT` | Pendiente |
+| USB pads | `D+/IO20`, `D-/IO19`, `VBUS`, `GND` | Pendiente |
+| I2C pads | `IO15`, `IO14`, `3V3`, `GND` | Pendiente |
+| UART pads | `RXD/U0RXD`, `TXD/U0TXD`, `3V3`, `GND` | Pendiente |
 
 ## microSD
 

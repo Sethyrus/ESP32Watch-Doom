@@ -9,13 +9,13 @@ La base actual usa `ESP-IDF 5.5.4`, `LVGL` y el BSP oficial de Waveshare. No usa
 - Placa: Waveshare `ESP32-S3-Touch-AMOLED-2.06`.
 - MCU: `ESP32-S3R8`, dual-core LX7 hasta 240 MHz.
 - PSRAM: 8 MB octal.
-- Flash: la wiki indica 32 MB; los ejemplos oficiales usan config de 16 MB.
+- Flash: el esquematico monta `GD25Q256EYIGR` de 32 MB; el baseline usa config de 16 MB hasta validar la placa real.
 - Pantalla: AMOLED 2.06", 410 x 502, QSPI.
 - Touch: `FT3168` por I2C, driver BSP `esp_lcd_touch_ft5x06`.
 - IMU: `QMI8658` por I2C.
 - RTC: `PCF85063` por I2C.
 - PMU/bateria: `AXP2101` por I2C.
-- Audio: codec/speaker `ES8311`, microfono `ES7210`, I2S.
+- Audio: codec/speaker `ES8311`, doble microfono via ADC `ES7210`, I2S.
 - Storage: microSD por SDMMC 1-bit.
 
 Ver detalles en `docs/HARDWARE.md`.

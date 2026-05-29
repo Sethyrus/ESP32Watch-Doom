@@ -2,7 +2,7 @@
 
 ## Project Shape
 - This is an ESP-IDF C firmware project named `ESP32S3Watch`; the app entrypoint is `app_main()` in `main/main.c`.
-- Target hardware is Waveshare `ESP32-S3-Touch-AMOLED-2.06` with ESP32-S3R8, AMOLED 410x502 QSPI, FT3168 touch, QMI8658 IMU, PCF85063 RTC, AXP2101 PMU, ES8311/ES7210 audio, and microSD.
+- Target hardware is Waveshare `ESP32-S3-Touch-AMOLED-2.06` with ESP32-S3R8, AMOLED 410x502 QSPI, FT3168 touch, QMI8658 IMU, PCF85063 RTC, AXP2101 PMU, ES8311 speaker, ES7210 dual-mic ADC, and microSD.
 - Baseline stack is `ESP-IDF 5.5.4 + LVGL 9 + waveshare/esp32_s3_touch_amoled_2_06` BSP. Do not migrate to ESP-IDF 6.x or ESP-Brookesia unless explicitly requested.
 - Keep `main` small. Add new `main` sources in `main/CMakeLists.txt`, or create ESP-IDF components for reusable code.
 - Durable project config lives in `sdkconfig.defaults`, `partitions.csv`, and component manifests. `sdkconfig`, `build/`, and `managed_components/` are generated/local.
@@ -25,9 +25,11 @@
 - Display brightness is controlled by command `0x51` over QSPI (`0x00..0xFF`), exposed as `bsp_display_brightness_set(percent)`.
 - LVGL is not thread-safe. Wrap all `lv_*` calls made outside LVGL callbacks/tasks with `bsp_display_lock()` and `bsp_display_unlock()`.
 - The BSP declares no IMU or button support. Use `waveshare/qmi8658` for IMU and custom code/components for BOOT GPIO0, RTC PCF85063, and PMU AXP2101.
-- Do not assume PWR is a direct ESP32 GPIO. The wiki says PWR is readable through `EXIO6`, high when pressed, and holding it around 6s powers off the board.
+- Do not assume PWR is a direct ESP32 GPIO. The schematic routes it through AXP2101 `PWRON`, the wiki says it is readable through `EXIO6` high when pressed, and holding it around 6s powers off the board.
 - For microSD in ESP-IDF use BSP SDMMC 1-bit (`CLK GPIO2`, `CMD GPIO1`, `D0 GPIO3`). `GPIO17` appears only in Arduino SPI-style SD examples.
 - QMI8658 default accel units are milli-g. If using screen physics, normalize and map axes as `screen_x = -accelY / 1000.0f`, `screen_y = accelX / 1000.0f` unless m/s2 mode is enabled.
+- Schematic-only pins not wrapped by BSP include motor `GPIO18`, QMI INT `GPIO21`, RTC INT `GPIO39`, LCD TE `GPIO13`, `SYS_OUT/GPIO10`, and external pads; verify before use.
+- For I2C scans, ES7210 should appear as `0x40` 7-bit even though `esp_codec_dev` uses an `0x80` default-address macro.
 
 ## Documentation Map
 - `README.md`: project overview and quick start.
