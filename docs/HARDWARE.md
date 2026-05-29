@@ -112,6 +112,8 @@ Estos pines o nets aparecen en el esquematico oficial, pero no tienen API de alt
 
 Todos comparten `SDA=GPIO15` y `SCL=GPIO14` en el bus del BSP.
 
+Regla practica: si el display/touch ya arrancaron con `bsp_display_start()`, reutilizar `bsp_i2c_get_handle()` para IMU, RTC, PMU o codecs. No copiar ejemplos aislados que llaman `i2c_new_master_bus()` sobre el mismo puerto salvo que la app no haya inicializado el BSP.
+
 | Dispositivo | Modelo | Direccion | Estado |
 | --- | --- | --- | --- |
 | Touch | `FT3168` / driver `FT5x06` | `0x38` | BSP lo inicializa con LVGL. |
@@ -368,3 +370,9 @@ La wiki indica que la placa saca pads/puertos externos. El esquematico y el silk
 | USB pad | `D+/IO20`, `D-/IO19`, `VBUS`, `GND` | Conexion/debug USB nativo | Compartido con USB del ESP32-S3. |
 
 Aunque estos pads ya salen del esquematico, validar continuidad y funcion en la placa real antes de disenar accesorios o asumir tolerancia electrica.
+
+## USB, Flash Y Recovery
+
+- El puerto Type-C de flashing/debug sale directamente del USB nativo del ESP32-S3.
+- La placa tiene circuito de descarga automatica, asi que normalmente `idf.py flash` no requiere pulsar `BOOT`.
+- Si un firmware rompe USB, deja la CPU colgada o el auto-download no entra, mantener `BOOT` al alimentar/resetear fuerza modo descarga.

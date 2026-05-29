@@ -32,6 +32,7 @@ Salir de monitor: `Ctrl+]`.
 | Display | UI `ESP32S3Watch` visible. | Pendiente hardware. |
 | Brillo | Brillo cambia con `bsp_display_brightness_set(80)`. | Pendiente hardware. |
 | Touch | Widgets LVGL responden si se anade boton/gesture de prueba. | Pendiente hardware. |
+| Auto-download USB | `idf.py flash` entra solo por Type-C sin pulsar `BOOT`. | Pendiente hardware. |
 | Recovery | Mantener `BOOT` al alimentar permite volver a flashear si hay crash. | Pendiente hardware. |
 
 ## Flash Real
@@ -68,6 +69,8 @@ Direcciones esperadas:
 | ES7210 mic ADC | `0x40` 7-bit (`0x80` macro en `esp_codec_dev`) | Pendiente |
 
 Si falta un dispositivo, comprobar alimentacion/PMU antes de asumir fallo del sensor.
+
+Para hacer el scan desde una app que ya usa pantalla/touch, usar el handle de `bsp_i2c_get_handle()` y no crear otro bus sobre el mismo puerto.
 
 ## Display Y LVGL
 

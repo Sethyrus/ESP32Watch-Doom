@@ -101,3 +101,9 @@ La wiki, el repo oficial, el esquematico local, el BSP resuelto y el proyecto pr
 | `docs/GOTCHAS.md` | Recovery, flash, PWR, bateria, SD GPIO17, ES7210 scan, LVGL, BSP caveats. |
 | `docs/SETUP.md` | Setup ESP-IDF, particiones, dependencias y ejemplos oficiales. |
 | `docs/BRINGUP.md` | Checklist de validacion hardware. |
+
+## Notas De Fiabilidad De Fuentes
+
+- La wiki mezcla contenido especifico de esta placa con texto generico de tutorial. No arrastrar menciones a un supuesto boton `Reset` sin validarlo: la placa documentada aqui se trata como `BOOT` + `PWR`.
+- Algunos consejos de troubleshooting de Waveshare para demos sugieren borrar `dependencies.lock`. En este repo el lock es deliberado y solo debe cambiar si se aceptan nuevas versiones de componentes.
+- Los ejemplos ESP-IDF oficiales son utiles para patrones aislados, pero si una app ya arranco el BSP hay que adaptar la inicializacion de buses, especialmente I2C.

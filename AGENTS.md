@@ -25,7 +25,9 @@
 - Display brightness is controlled by command `0x51` over QSPI (`0x00..0xFF`), exposed as `bsp_display_brightness_set(percent)`.
 - LVGL is not thread-safe. Wrap all `lv_*` calls made outside LVGL callbacks/tasks with `bsp_display_lock()` and `bsp_display_unlock()`.
 - The BSP declares no IMU or button support. Use `waveshare/qmi8658` for IMU and custom code/components for BOOT GPIO0, RTC PCF85063, and PMU AXP2101.
+- Reuse `bsp_i2c_get_handle()` for devices on the shared I2C bus after display/touch startup; do not create a second master bus on the same port by copying standalone examples.
 - Do not assume PWR is a direct ESP32 GPIO. The schematic routes it through AXP2101 `PWRON`, the wiki says it is readable through `EXIO6` high when pressed, and holding it around 6s powers off the board.
+- Type-C flashing/debug uses native ESP32-S3 USB with auto-download; BOOT GPIO0 is the recovery path when USB/firmware state blocks normal flashing.
 - For microSD in ESP-IDF use BSP SDMMC 1-bit (`CLK GPIO2`, `CMD GPIO1`, `D0 GPIO3`). `GPIO17` appears only in Arduino SPI-style SD examples.
 - QMI8658 default accel units are milli-g. If using screen physics, normalize and map axes as `screen_x = -accelY / 1000.0f`, `screen_y = accelX / 1000.0f` unless m/s2 mode is enabled.
 - Schematic-only pins not wrapped by BSP include motor `GPIO18`, QMI INT `GPIO21`, RTC INT `GPIO39`, LCD TE `GPIO13`, `SYS_OUT/GPIO10`, and external pads; verify before use.

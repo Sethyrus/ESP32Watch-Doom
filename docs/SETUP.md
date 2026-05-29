@@ -102,6 +102,10 @@ La extension ESP-IDF debe apuntar a:
 idf.py build
 ```
 
+## Devcontainer
+
+El devcontainer usa la imagen Docker `espressif/idf:v5.5.4` para mantener la misma version que el baseline local. Evitar tags flotantes tipo `release-v5.5` si se necesita reproducibilidad exacta.
+
 ## Dependencias
 
 El componente `main` declara dependencias en `main/idf_component.yml`:
@@ -157,4 +161,4 @@ Falla por componentes antiguos o cacheados:
 idf.py reconfigure
 ```
 
-Si sigue fallando por cache de build, borrar `build/` manualmente o desde el IDE. Si se sospecha resolucion vieja de componentes, borrar tambien `managed_components/` y regenerar. `dependencies.lock` solo debe actualizarse si se aceptan nuevas versiones resueltas. No borrar cambios fuente.
+Si sigue fallando por cache de build, borrar `build/` manualmente o desde el IDE. Si se sospecha resolucion vieja de componentes, borrar tambien `managed_components/` y regenerar. `dependencies.lock` solo debe actualizarse si se aceptan nuevas versiones resueltas; no borrarlo como limpieza rutinaria aunque algunos textos de Waveshare lo sugieran para demos aisladas. No borrar cambios fuente.

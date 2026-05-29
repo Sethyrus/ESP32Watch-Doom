@@ -106,6 +106,12 @@ Aunque la placa los tiene, `BSP_CAPS_IMU` y `BSP_CAPS_BUTTONS` son 0. Para IMU u
 
 Pines utiles del esquematico que tampoco son APIs BSP: motor `GPIO18`, QMI INT `GPIO21`, RTC INT `GPIO39`, LCD TE `GPIO13`, `SYS_OUT/GPIO10` y pads externos USB/I2C/UART. Validar antes de usarlos.
 
+## Un Solo Owner Para El Bus I2C
+
+El BSP inicializa el bus I2C en port `1` para touch y lo deja disponible con `bsp_i2c_get_handle()`. Al anadir QMI8658, PCF85063, AXP2101 u otros dispositivos, colgarlos de ese handle.
+
+No copiar literalmente ejemplos independientes como `01_AXP2101` que crean su propio bus con `i2c_new_master_bus()` si la app ya llamo a `bsp_display_start()`: en ese caso puede haber conflicto de ownership del puerto I2C o dobles inicializaciones dificiles de depurar.
+
 ## PWR Puede Apagar La Placa
 
 El boton `PWR` tiene comportamiento de alimentacion ademas de posible input de usuario.
@@ -165,9 +171,15 @@ Los ejemplos Arduino son utiles para entender sensores y comportamiento, pero es
 
 Si el firmware crashea y el USB no responde, mantener `BOOT` y encender/resetear para entrar en modo descarga antes de flashear de nuevo.
 
+El Type-C de flashing/debug es USB nativo del ESP32-S3 y la placa tiene auto-download; en flujo normal no hace falta pulsar `BOOT`. `BOOT` es la ruta de rescate cuando el firmware o el estado USB impiden entrar automaticamente.
+
 Notas de FAQ:
 
 - Si el flasheo falla porque el monitor ocupa el puerto, cerrar monitor y reintentar.
 - Si la placa entra en modo descarga forzado, puede no salir automaticamente tras flashear; apagar y reiniciar.
 - Si el monitor queda en `waiting for download...`, volver a alimentar/reiniciar la placa.
 - Para volver a encender tras apagado completo, la FAQ indica mantener `PWR` al menos 6 s y luego pulsar `PWR` otra vez.
+
+## No Borrar `dependencies.lock` Por Rutina
+
+La wiki de Waveshare recomienda borrar `build`, `managed_components` y `dependencies.lock` en algun troubleshooting de demos. En este repo `dependencies.lock` es parte del estado reproducible: borrar `build/` y `managed_components/` es limpieza local; cambiar o regenerar `dependencies.lock` solo si se aceptan nuevas versiones resueltas.
