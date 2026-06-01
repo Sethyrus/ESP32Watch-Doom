@@ -1,0 +1,107 @@
+set(DOOMGENERIC_DIR vendor/doomgeneric)
+
+set(DOOMGENERIC_SRCS
+    ${DOOMGENERIC_DIR}/dummy.c
+    ${DOOMGENERIC_DIR}/am_map.c
+    ${DOOMGENERIC_DIR}/doomdef.c
+    ${DOOMGENERIC_DIR}/doomgeneric.c
+    ${DOOMGENERIC_DIR}/doomstat.c
+    ${DOOMGENERIC_DIR}/dstrings.c
+    ${DOOMGENERIC_DIR}/d_event.c
+    ${DOOMGENERIC_DIR}/d_items.c
+    ${DOOMGENERIC_DIR}/d_iwad.c
+    ${DOOMGENERIC_DIR}/d_loop.c
+    ${DOOMGENERIC_DIR}/d_main.c
+    ${DOOMGENERIC_DIR}/d_mode.c
+    ${DOOMGENERIC_DIR}/d_net.c
+    ${DOOMGENERIC_DIR}/f_finale.c
+    ${DOOMGENERIC_DIR}/f_wipe.c
+    ${DOOMGENERIC_DIR}/g_game.c
+    ${DOOMGENERIC_DIR}/hu_lib.c
+    ${DOOMGENERIC_DIR}/hu_stuff.c
+    ${DOOMGENERIC_DIR}/info.c
+    ${DOOMGENERIC_DIR}/i_cdmus.c
+    ${DOOMGENERIC_DIR}/i_endoom.c
+    ${DOOMGENERIC_DIR}/i_input.c
+    ${DOOMGENERIC_DIR}/i_joystick.c
+    ${DOOMGENERIC_DIR}/i_scale.c
+    ${DOOMGENERIC_DIR}/i_sound.c
+    ${DOOMGENERIC_DIR}/i_system.c
+    ${DOOMGENERIC_DIR}/i_timer.c
+    ${DOOMGENERIC_DIR}/i_video.c
+    ${DOOMGENERIC_DIR}/m_argv.c
+    ${DOOMGENERIC_DIR}/m_bbox.c
+    ${DOOMGENERIC_DIR}/m_cheat.c
+    ${DOOMGENERIC_DIR}/m_config.c
+    ${DOOMGENERIC_DIR}/m_controls.c
+    ${DOOMGENERIC_DIR}/m_fixed.c
+    ${DOOMGENERIC_DIR}/m_menu.c
+    ${DOOMGENERIC_DIR}/m_misc.c
+    ${DOOMGENERIC_DIR}/m_random.c
+    ${DOOMGENERIC_DIR}/memio.c
+    ${DOOMGENERIC_DIR}/p_ceilng.c
+    ${DOOMGENERIC_DIR}/p_doors.c
+    ${DOOMGENERIC_DIR}/p_enemy.c
+    ${DOOMGENERIC_DIR}/p_floor.c
+    ${DOOMGENERIC_DIR}/p_inter.c
+    ${DOOMGENERIC_DIR}/p_lights.c
+    ${DOOMGENERIC_DIR}/p_map.c
+    ${DOOMGENERIC_DIR}/p_maputl.c
+    ${DOOMGENERIC_DIR}/p_mobj.c
+    ${DOOMGENERIC_DIR}/p_plats.c
+    ${DOOMGENERIC_DIR}/p_pspr.c
+    ${DOOMGENERIC_DIR}/p_saveg.c
+    ${DOOMGENERIC_DIR}/p_setup.c
+    ${DOOMGENERIC_DIR}/p_sight.c
+    ${DOOMGENERIC_DIR}/p_spec.c
+    ${DOOMGENERIC_DIR}/p_switch.c
+    ${DOOMGENERIC_DIR}/p_telept.c
+    ${DOOMGENERIC_DIR}/p_tick.c
+    ${DOOMGENERIC_DIR}/p_user.c
+    ${DOOMGENERIC_DIR}/r_bsp.c
+    ${DOOMGENERIC_DIR}/r_data.c
+    ${DOOMGENERIC_DIR}/r_draw.c
+    ${DOOMGENERIC_DIR}/r_main.c
+    ${DOOMGENERIC_DIR}/r_plane.c
+    ${DOOMGENERIC_DIR}/r_segs.c
+    ${DOOMGENERIC_DIR}/r_sky.c
+    ${DOOMGENERIC_DIR}/r_things.c
+    ${DOOMGENERIC_DIR}/s_sound.c
+    ${DOOMGENERIC_DIR}/sha1.c
+    ${DOOMGENERIC_DIR}/sounds.c
+    ${DOOMGENERIC_DIR}/st_lib.c
+    ${DOOMGENERIC_DIR}/st_stuff.c
+    ${DOOMGENERIC_DIR}/statdump.c
+    ${DOOMGENERIC_DIR}/tables.c
+    ${DOOMGENERIC_DIR}/v_video.c
+    ${DOOMGENERIC_DIR}/w_checksum.c
+    ${DOOMGENERIC_DIR}/w_file.c
+    ${DOOMGENERIC_DIR}/w_file_stdc.c
+    ${DOOMGENERIC_DIR}/w_main.c
+    ${DOOMGENERIC_DIR}/w_wad.c
+    ${DOOMGENERIC_DIR}/wi_stuff.c
+    ${DOOMGENERIC_DIR}/z_zone.c
+)
+
+idf_component_register(
+    SRCS ${DOOMGENERIC_SRCS}
+    INCLUDE_DIRS ${DOOMGENERIC_DIR}
+    REQUIRES heap
+)
+
+target_compile_definitions(${COMPONENT_LIB} PRIVATE
+    DOOMGENERIC_RESX=320
+    DOOMGENERIC_RESY=240
+    _DEFAULT_SOURCE
+)
+
+target_compile_options(${COMPONENT_LIB} PRIVATE
+    -Wno-error=format
+    -Wno-error=format-truncation
+    -Wno-error=implicit-fallthrough
+    -Wno-error=missing-field-initializers
+    -Wno-error=type-limits
+    -Wno-error=dangling-pointer
+    -Wno-error=unused-but-set-parameter
+    -Wno-error=unused-const-variable
+)
