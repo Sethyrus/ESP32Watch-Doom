@@ -57,7 +57,7 @@ El desarrollo no debe tocar `partitions.csv` ni `sdkconfig.defaults` salvo que e
 
 ## Estado De Implementacion
 
-Hito compile-first completado.
+Hito compile-first completado y bring-up inicial de display/SD implementado.
 
 | Area | Estado |
 | --- | --- |
@@ -67,12 +67,13 @@ Hito compile-first completado.
 | App propia | `components/doom_app` con `doom_app_start()` y tarea FreeRTOS dedicada |
 | Bootstrap | `main/main.c` arranca firmware standalone Doom en vez de demo LVGL |
 | BSP/LVGL | Dependencias conservadas para la siguiente fase, pero no usadas en runtime Doom actual |
-| Display | Stub: `DG_DrawFrame()` solo loguea FPS/heap si el motor corre |
-| Storage | Stub: si `/sdcard/doom1.wad` no existe, no arranca motor y suspende la tarea |
+| Display | Directo por BSP `bsp_display_new()`, brillo 80%, patron diagnostico RGB565 si no hay WAD |
+| Render Doom | `DG_DrawFrame()` envia el framebuffer `320 x 240` centrado en `410 x 502` con swap RGB565 |
+| Storage | `bsp_sdcard_mount()` antes de comprobar `/sdcard/doom1.wad`; si falta WAD, deja pantalla diagnostica y suspende la tarea |
 | Input | Stub: `DG_GetKey()` no emite eventos todavia |
 | Audio | Deshabilitado por argv con `-nosound -nomusic` |
 | Build | `idf.py build` OK |
-| Tamano binario | `0x7d630` bytes; slot app `8M`, `0x7829d0` bytes libres |
+| Tamano binario | `0x9b1c0` bytes; slot app `8M`, `0x764e40` bytes libres |
 | Memoria tras build | DIRAM usada 273,567 bytes, quedan 68,193; `.ext_ram.bss` reportada como 84,992 bytes |
 
 Parches locales aplicados al vendor:
@@ -82,8 +83,17 @@ Parches locales aplicados al vendor:
 | `doomgeneric.c` | `DG_ScreenBuffer` usa `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna |
 | `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM` | `-mb 4` debe ir a PSRAM y no debe llamar `zenity/system()` |
 | `r_plane.c` | `visplanes` usa `EXT_RAM_BSS_ATTR` | Resolver overflow DRAM manteniendo limite `MAXVISPLANES=128` |
+| `vendor/.gitignore` | Ya no ignora la carpeta fuente `doomgeneric/` | Evitar que el vendor quede incompleto |
 | `CMakeLists.txt` vendor | Fuentes listadas explicitamente, `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` | Build reproducible y framebuffer 320 x 240 |
 | `CMakeLists.txt` vendor | `-Wno-error` solo para warnings concretos de third-party | Mantener `-Werror` en codigo propio sin usar `-w` global |
+
+Comportamiento runtime esperado despues del bring-up:
+
+| Caso | Resultado esperado |
+| --- | --- |
+| Sin SD o SD no montable | Log `SD mount failed`, pantalla con barras de color, tarea suspendida tras no encontrar WAD |
+| SD montada sin `/sdcard/doom1.wad` | Log `WAD not found`, pantalla con barras de color, tarea suspendida |
+| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; `DG_DrawFrame()` dibuja `320 x 240` centrado |
 
 Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer esta rama, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
 
