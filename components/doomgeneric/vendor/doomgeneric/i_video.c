@@ -41,6 +41,7 @@ rcsid[] = "$Id: i_x.c,v 1.6 1997/02/03 22:45:10 b1 Exp $";
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <fcntl.h>
 
@@ -204,8 +205,11 @@ void cmap_to_fb(uint8_t *out, uint8_t *in, int in_pixels)
 
 void I_InitGraphics (void)
 {
-    int i, gfxmodeparm;
+    int i;
+#ifndef CMAP256
+    int gfxmodeparm;
     char *mode;
+#endif
 
 	memset(&s_Fb, 0, sizeof(struct FB_ScreenInfo));
 	s_Fb.xres = DOOMGENERIC_RESX;
@@ -265,10 +269,11 @@ void I_InitGraphics (void)
 #endif  // CMAP256
 
     printf("I_InitGraphics: framebuffer: x_res: %d, y_res: %d, x_virtual: %d, y_virtual: %d, bpp: %d\n",
-            s_Fb.xres, s_Fb.yres, s_Fb.xres_virtual, s_Fb.yres_virtual, s_Fb.bits_per_pixel);
+            (int)s_Fb.xres, (int)s_Fb.yres, (int)s_Fb.xres_virtual, (int)s_Fb.yres_virtual, (int)s_Fb.bits_per_pixel);
 
     printf("I_InitGraphics: framebuffer: RGBA: %d%d%d%d, red_off: %d, green_off: %d, blue_off: %d, transp_off: %d\n",
-            s_Fb.red.length, s_Fb.green.length, s_Fb.blue.length, s_Fb.transp.length, s_Fb.red.offset, s_Fb.green.offset, s_Fb.blue.offset, s_Fb.transp.offset);
+            (int)s_Fb.red.length, (int)s_Fb.green.length, (int)s_Fb.blue.length, (int)s_Fb.transp.length,
+            (int)s_Fb.red.offset, (int)s_Fb.green.offset, (int)s_Fb.blue.offset, (int)s_Fb.transp.offset);
 
     printf("I_InitGraphics: DOOM screen size: w x h: %d x %d\n", SCREENWIDTH, SCREENHEIGHT);
 
@@ -320,6 +325,41 @@ void I_UpdateNoBlit (void)
 
 void I_FinishUpdate (void)
 {
+#ifdef CMAP256
+    memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY);
+
+    int scaled_width = SCREENWIDTH * fb_scaling;
+    int scaled_height = SCREENHEIGHT * fb_scaling;
+    int x_offset = (DOOMGENERIC_RESX - scaled_width) / 2;
+    int y_offset = (DOOMGENERIC_RESY - scaled_height) / 2;
+
+    if (x_offset < 0) {
+        x_offset = 0;
+    }
+    if (y_offset < 0) {
+        y_offset = 0;
+    }
+
+    for (int y = 0; y < SCREENHEIGHT; y++) {
+        const unsigned char *line_in = (const unsigned char *)I_VideoBuffer + y * SCREENWIDTH;
+
+        for (int ys = 0; ys < fb_scaling; ys++) {
+            unsigned char *line_out = (unsigned char *)DG_ScreenBuffer
+                                    + (y_offset + y * fb_scaling + ys) * DOOMGENERIC_RESX
+                                    + x_offset;
+
+            if (fb_scaling == 1) {
+                memcpy(line_out, line_in, SCREENWIDTH);
+            } else {
+                for (int x = 0; x < SCREENWIDTH; x++) {
+                    memset(line_out + x * fb_scaling, line_in[x], fb_scaling);
+                }
+            }
+        }
+    }
+
+	DG_DrawFrame();
+#else
     int y;
     int x_offset, y_offset, x_offset_end;
     unsigned char *line_in, *line_out;
@@ -367,6 +407,7 @@ void I_FinishUpdate (void)
     }
 
 	DG_DrawFrame();
+#endif
 }
 
 //

@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 
 #include "bsp/esp32_s3_touch_amoled_2_06.h"
+#include "bsp/touch.h"
 #include "doomgeneric.h"
 #include "esp_err.h"
 #include "esp_lcd_panel_ops.h"
@@ -20,6 +21,7 @@
 static const char *TAG = "doom_app";
 static bool s_display_ready;
 static bool s_sd_mounted;
+static esp_lcd_touch_handle_t s_touch;
 
 static esp_err_t doom_app_init_display(void)
 {
@@ -73,6 +75,24 @@ static void doom_app_mount_sd(void)
     }
 }
 
+static void doom_app_init_input(void)
+{
+    esp_err_t err = doom_port_init_input();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "BOOT input init failed: %s", esp_err_to_name(err));
+    }
+
+    err = bsp_touch_new(NULL, &s_touch);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Touch init failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "Continuing with BOOT-only input");
+        return;
+    }
+
+    doom_port_set_touch(s_touch);
+    ESP_LOGI(TAG, "Input initialized: touch zones + BOOT GPIO0");
+}
+
 static void doom_task(void *arg)
 {
     (void)arg;
@@ -83,6 +103,8 @@ static void doom_task(void *arg)
         ESP_LOGE(TAG, "Display initialization failed; suspending Doom task");
         vTaskSuspend(NULL);
     }
+
+    doom_app_init_input();
 
     doom_app_mount_sd();
 
@@ -105,7 +127,6 @@ static void doom_task(void *arg)
         "-nosound",
         "-nomusic",
         "-nogui",
-        "-gfxmode", "rgb565",
     };
     const int argc = sizeof(argv) / sizeof(argv[0]);
 

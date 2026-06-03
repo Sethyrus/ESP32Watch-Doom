@@ -23,7 +23,7 @@ void doomgeneric_Create(int argc, char **argv)
 
 	M_FindResponseFile();
 
-	size_t framebuffer_size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * 4;
+	size_t framebuffer_size = DOOMGENERIC_RESX * DOOMGENERIC_RESY * sizeof(pixel_t);
 
 #ifdef ESP_PLATFORM
 	DG_ScreenBuffer = heap_caps_malloc(framebuffer_size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);

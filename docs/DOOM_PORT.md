@@ -68,23 +68,24 @@ Hito compile-first completado y bring-up inicial de display/SD implementado.
 | Bootstrap | `main/main.c` arranca firmware standalone Doom en vez de demo LVGL |
 | BSP/LVGL | Dependencias conservadas para la siguiente fase, pero no usadas en runtime Doom actual |
 | Display | Directo por BSP `bsp_display_new()`, brillo 80%, patron diagnostico RGB565 si no hay WAD |
-| Render Doom | `DG_DrawFrame()` envia el framebuffer `320 x 240` centrado en `410 x 502` con swap RGB565 |
+| Render Doom | `CMAP256`: Doom genera indices de paleta `320 x 240`; `DG_DrawFrame()` convierte a RGB565 y dibuja centrado en `410 x 502` |
 | Storage | `bsp_sdcard_mount()` antes de comprobar `/sdcard/doom1.wad`; si falta WAD, deja pantalla diagnostica y suspende la tarea |
-| Input | Stub: `DG_GetKey()` no emite eventos todavia |
+| Input | Touch por zonas + `BOOT` GPIO0 con cola de eventos `keydown`/`keyup` |
 | Audio | Deshabilitado por argv con `-nosound -nomusic` |
 | Build | `idf.py build` OK |
-| Tamano binario | `0x9b1c0` bytes; slot app `8M`, `0x764e40` bytes libres |
-| Memoria tras build | DIRAM usada 273,567 bytes, quedan 68,193; `.ext_ram.bss` reportada como 84,992 bytes |
+| Tamano binario | `0xa1440` bytes; slot app `8M`, `0x75ebc0` bytes libres |
+| Memoria tras build | DIRAM usada 291,631 bytes, quedan 50,129; `.ext_ram.bss` reportada como 84,992 bytes |
 
 Parches locales aplicados al vendor:
 
 | Archivo | Cambio | Motivo |
 | --- | --- | --- |
-| `doomgeneric.c` | `DG_ScreenBuffer` usa `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna |
+| `doomgeneric.c` | `DG_ScreenBuffer` usa `sizeof(pixel_t)` y `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna y no sobrerreservar en `CMAP256` |
+| `i_video.c` | `CMAP256` copia `320 x 200` centrado dentro de framebuffer `320 x 240` | Evitar la ruta `rgb565` upstream que no era fiable en panel real |
 | `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM` | `-mb 4` debe ir a PSRAM y no debe llamar `zenity/system()` |
 | `r_plane.c` | `visplanes` usa `EXT_RAM_BSS_ATTR` | Resolver overflow DRAM manteniendo limite `MAXVISPLANES=128` |
 | `vendor/.gitignore` | Ya no ignora la carpeta fuente `doomgeneric/` | Evitar que el vendor quede incompleto |
-| `CMakeLists.txt` vendor | Fuentes listadas explicitamente, `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` | Build reproducible y framebuffer 320 x 240 |
+| `CMakeLists.txt` vendor | Fuentes listadas explicitamente, `CMAP256`, `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` | Build reproducible y framebuffer indexado 320 x 240 |
 | `CMakeLists.txt` vendor | `-Wno-error` solo para warnings concretos de third-party | Mantener `-Werror` en codigo propio sin usar `-w` global |
 
 Comportamiento runtime esperado despues del bring-up:
@@ -93,7 +94,7 @@ Comportamiento runtime esperado despues del bring-up:
 | --- | --- |
 | Sin SD o SD no montable | Log `SD mount failed`, pantalla con barras de color, tarea suspendida tras no encontrar WAD |
 | SD montada sin `/sdcard/doom1.wad` | Log `WAD not found`, pantalla con barras de color, tarea suspendida |
-| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; `DG_DrawFrame()` dibuja `320 x 240` centrado |
+| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; limpia barras a negro y dibuja `320 x 240` centrado |
 
 Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer esta rama, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
 
@@ -362,11 +363,11 @@ Tamanos iniciales razonables:
 | RGB565 410 x 40 chunk | 32.8 KB |
 | Dos chunks RGB565 410 x 40 | 65.6 KB |
 
-Si se usa DoomGeneric upstream sin `CMAP256`, el framebuffer sera RGBA8888 y asumible con 8 MB PSRAM. Si se consigue usar `CMAP256` de forma limpia, se reduce memoria y conversion, pero no debe bloquear el primer build.
+El port actual usa `CMAP256`. Doom copia indices de paleta a un framebuffer `320 x 240` en PSRAM, con el render interno `320 x 200` centrado verticalmente. `doom_port.c` convierte esos indices a RGB565 en chunks DMA y aplica byte swap antes de llamar a `esp_lcd_panel_draw_bitmap()`.
 
-Formato inicial elegido: compilar con framebuffer `320 x 240` y arrancar con `-gfxmode rgb565`, soportado por el commit importado de DoomGeneric. Esto reduce la conversion futura en `DG_DrawFrame()`, aunque upstream todavia reserva `DG_ScreenBuffer` como `RESX * RESY * 4`.
+La ruta anterior `-gfxmode rgb565` arrancaba y generaba frames, pero en hardware solo mostraba franjas/pixeles parciales porque dependia de una conversion upstream fragil. `CMAP256` deja el formato de salida bajo control del port ESP32.
 
-Gotcha: en DoomGeneric upstream, `doomgeneric_Create()` reserva `DG_ScreenBuffer` con `malloc(DOOMGENERIC_RESX * DOOMGENERIC_RESY * 4)` antes de llamar a `DG_Init()`. Para firmware ESP32-S3 hay que controlar esa reserva con un parche minimo o wrapper para ubicar el framebuffer en PSRAM. No reasignar el puntero en `DG_Init()` sin evitar/freear la reserva previa.
+Gotcha: en DoomGeneric upstream, `doomgeneric_Create()` reserva `DG_ScreenBuffer` con `malloc(DOOMGENERIC_RESX * DOOMGENERIC_RESY * 4)` antes de llamar a `DG_Init()`. El port lo parchea a `sizeof(pixel_t)` y PSRAM para que `CMAP256` reserve 76,800 bytes en vez de 307,200 bytes.
 
 ## Storage Y WAD
 
@@ -400,7 +401,7 @@ No commitear WADs al repo salvo que se haya revisado y documentado su licencia.
 Argumentos iniciales propuestos para el arranque standalone:
 
 ```text
-doom -iwad /sdcard/doom1.wad -mb 4 -nosound -nomusic -nogui -gfxmode rgb565
+doom -iwad /sdcard/doom1.wad -mb 4 -nosound -nomusic -nogui
 ```
 
 Notas:
@@ -411,7 +412,6 @@ Notas:
 | `-mb 4` | Zone memory inicial contenida; ajustar tras medir |
 | `-nosound -nomusic` | Mantener audio fuera del MVP |
 | `-nogui` | Evitar rutas desktop de error popup |
-| `-gfxmode rgb565` | El commit importado lo soporta y reduce conversion futura |
 | Resolucion | Fijar por CMake/defines: `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` |
 
 ## Input
@@ -430,19 +430,18 @@ Opciones iniciales:
 
 Mapping minimo de PoC:
 
-| Accion Doom | Input inicial sugerido |
+| Accion Doom | Input actual |
 | --- | --- |
 | Move forward/back | Touch zona superior/inferior |
-| Turn left/right | Touch zona izquierda/derecha |
+| Turn left/right | Touch zona izquierda/derecha en la franja media |
 | Fire | `BOOT` activo bajo |
-| Use/open | Zona touch central/inferior |
-| Menu/escape | Zona touch superior mantenida o combinacion simple |
+| Menu select/enter | `BOOT` activo bajo y zona central |
+| Use/open | Zona central del touch |
+| Menu/escape | Esquina superior izquierda del touch |
 
 Si no se usa LVGL, el touch debe leerse mediante driver `esp_lcd_touch`/BSP touch sin depender del input device LVGL. Hay que definir si Doom toma ownership del touch durante su ejecucion.
 
-Para DoomGeneric, el input debe emitirse como eventos de transicion (`keydown`/`keyup`), no como niveles repetidos indefinidamente. La HAL de input debe guardar el estado anterior de cada zona/boton y devolver un evento por llamada a `DG_GetKey()`.
-
-Prioridad practica: si touch bloquea el primer build, aceptar temporalmente stubs de input o solo `BOOT`; completar touch inmediatamente despues del primer `idf.py build` OK.
+Para DoomGeneric, el input se emite como eventos de transicion (`keydown`/`keyup`), no como niveles repetidos indefinidamente. La HAL guarda el estado anterior de cada zona/boton y devuelve un evento por llamada a `DG_GetKey()`.
 
 ## Audio
 
@@ -622,7 +621,7 @@ Objetivo: mostrar Doom o, si falla el motor, un patron RGB565 de diagnostico por
 | Paso | Resultado |
 | --- | --- |
 | Reservar framebuffer en PSRAM | Sin agotar SRAM interna |
-| Usar framebuffer `rgb565` actual o `CMAP256` posterior | Formato entendido y documentado |
+| Usar framebuffer `CMAP256` | Formato entendido y documentado |
 | Convertir/enviar chunks RGB565 | `esp_lcd_panel_draw_bitmap()` funciona |
 | Aplicar byte swap | Colores correctos |
 | Alinear area SH8601 | Sin corrupcion de refresco |
@@ -666,8 +665,7 @@ Objetivo: mejorar comportamiento general sin cambiar de arquitectura.
 | --- | --- | --- |
 | Afinar chunk height | Mejor balance CPU/DMA | SRAM interna |
 | Doble buffer DMA | Solapar conversion/envio | Complejidad y semaforos |
-| Mantener `rgb565` end-to-end | Menos conversion | Depende de DoomGeneric/I_Video |
-| Explorar `CMAP256` | Menos memoria | Cambios de paleta/video |
+| Mantener `CMAP256` y optimizar conversion | Menos memoria y salida controlada | CPU por conversion paleta |
 | Escalado `410 x 307` | Mejor uso de pantalla | Mas CPU |
 | Landscape software | Mejor UX Doom | Rotacion/coste/input |
 | WAD en mmap/particion raw | Menos overhead de FS | Redisenar particiones |

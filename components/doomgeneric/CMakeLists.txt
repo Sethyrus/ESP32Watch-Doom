@@ -89,7 +89,8 @@ idf_component_register(
     REQUIRES heap
 )
 
-target_compile_definitions(${COMPONENT_LIB} PRIVATE
+target_compile_definitions(${COMPONENT_LIB} PUBLIC
+    CMAP256
     DOOMGENERIC_RESX=320
     DOOMGENERIC_RESY=240
     _DEFAULT_SOURCE
