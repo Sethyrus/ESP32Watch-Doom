@@ -57,7 +57,7 @@ El desarrollo no debe tocar `partitions.csv` ni `sdkconfig.defaults` salvo que e
 
 ## Estado De Implementacion
 
-Hito compile-first completado y bring-up inicial de display/SD implementado.
+Hito compile-first completado; bring-up inicial de display/SD/input implementado; render landscape por software activo.
 
 | Area | Estado |
 | --- | --- |
@@ -68,20 +68,20 @@ Hito compile-first completado y bring-up inicial de display/SD implementado.
 | Bootstrap | `main/main.c` arranca firmware standalone Doom en vez de demo LVGL |
 | BSP/LVGL | Dependencias conservadas para la siguiente fase, pero no usadas en runtime Doom actual |
 | Display | Directo por BSP `bsp_display_new()`, brillo 80%, patron diagnostico RGB565 si no hay WAD |
-| Render Doom | `CMAP256`: Doom genera indices de paleta `320 x 240`; `DG_DrawFrame()` convierte a RGB565 y dibuja centrado en `410 x 502` |
+| Render Doom | `CMAP256`: Doom estira `320 x 200` a `320 x 240`; `DG_DrawFrame()` escala/rota a landscape `502 x 376` dentro del panel `410 x 502` |
 | Storage | `bsp_sdcard_mount()` antes de comprobar `/sdcard/doom1.wad`; si falta WAD, deja pantalla diagnostica y suspende la tarea |
-| Input | Touch por zonas + `BOOT` GPIO0 con cola de eventos `keydown`/`keyup` |
+| Input | Touch transformado a coordenadas landscape + `BOOT` GPIO0 con cola de eventos `keydown`/`keyup` |
 | Audio | Deshabilitado por argv con `-nosound -nomusic` |
 | Build | `idf.py build` OK |
-| Tamano binario | `0xa1440` bytes; slot app `8M`, `0x75ebc0` bytes libres |
-| Memoria tras build | DIRAM usada 291,631 bytes, quedan 50,129; `.ext_ram.bss` reportada como 84,992 bytes |
+| Tamano binario | `0xa14b0` bytes; slot app `8M`, `0x75eb50` bytes libres |
+| Memoria tras build | DIRAM usada 293,455 bytes, quedan 48,305; `.ext_ram.bss` reportada como 84,992 bytes |
 
 Parches locales aplicados al vendor:
 
 | Archivo | Cambio | Motivo |
 | --- | --- | --- |
 | `doomgeneric.c` | `DG_ScreenBuffer` usa `sizeof(pixel_t)` y `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna y no sobrerreservar en `CMAP256` |
-| `i_video.c` | `CMAP256` copia `320 x 200` centrado dentro de framebuffer `320 x 240` | Evitar la ruta `rgb565` upstream que no era fiable en panel real |
+| `i_video.c` | `CMAP256` estira `320 x 200` a framebuffer `320 x 240` | Evitar la ruta `rgb565` upstream y corregir aspecto antes del blit final |
 | `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM` | `-mb 4` debe ir a PSRAM y no debe llamar `zenity/system()` |
 | `r_plane.c` | `visplanes` usa `EXT_RAM_BSS_ATTR` | Resolver overflow DRAM manteniendo limite `MAXVISPLANES=128` |
 | `vendor/.gitignore` | Ya no ignora la carpeta fuente `doomgeneric/` | Evitar que el vendor quede incompleto |
@@ -94,7 +94,7 @@ Comportamiento runtime esperado despues del bring-up:
 | --- | --- |
 | Sin SD o SD no montable | Log `SD mount failed`, pantalla con barras de color, tarea suspendida tras no encontrar WAD |
 | SD montada sin `/sdcard/doom1.wad` | Log `WAD not found`, pantalla con barras de color, tarea suspendida |
-| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; limpia barras a negro y dibuja `320 x 240` centrado |
+| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; limpia barras a negro y dibuja Doom landscape `502 x 376` rotado 90 grados |
 
 Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer esta rama, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
 
@@ -301,7 +301,7 @@ Reglas:
 
 ### Formato De Frame
 
-Doom clasico renderiza internamente `320 x 200`. DoomGeneric upstream usa `640 x 400` por defecto, asi que el port fija explicitamente `DOOMGENERIC_RESX=320` y `DOOMGENERIC_RESY=240` al compilar para el MVP. El framebuffer 320 x 240 deja margen vertical para mantener aspecto 4:3 en pixeles cuadrados.
+Doom clasico renderiza internamente `320 x 200`. DoomGeneric upstream usa `640 x 400` por defecto, asi que el port fija explicitamente `DOOMGENERIC_RESX=320` y `DOOMGENERIC_RESY=240`. El port estira verticalmente el render interno a `320 x 240` para corregir aspecto antes del blit final.
 
 Motivos:
 
@@ -322,7 +322,7 @@ Opciones de salida:
 | 502 x 376 landscape logico | Rotar por software para usar la placa en horizontal | Mejor UX para Doom | Mas coste CPU y mas complejidad de coordenadas |
 | Full panel 410 x 502 | Frame completo con barras/rotacion | Control total del output | Mayor transferencia y conversion |
 
-Modo recomendado para el primer hito visible: aceptar `320 x 200 centrado` si desbloquea el primer frame, y pasar rapido a `320 x 240 centrado` con escalado vertical simple. Despues medir y pasar a `410 x 307`. Dejar `landscape` para una fase posterior.
+Modo actual: `502 x 376 landscape logico`, rotado por software sobre el panel fisico `410 x 502`. Si el FPS cae demasiado, el fallback recomendado es bajar a `410 x 307` antes de optimizar mas.
 
 ### Pipeline De Render Recomendado
 
@@ -362,8 +362,10 @@ Tamanos iniciales razonables:
 | Dos chunks RGB565 320 x 40 | 51.2 KB |
 | RGB565 410 x 40 chunk | 32.8 KB |
 | Dos chunks RGB565 410 x 40 | 65.6 KB |
+| Landscape full-panel RGB565 410 x 20 chunk | 16.4 KB |
+| Dos chunks landscape 410 x 20 | 32.8 KB |
 
-El port actual usa `CMAP256`. Doom copia indices de paleta a un framebuffer `320 x 240` en PSRAM, con el render interno `320 x 200` centrado verticalmente. `doom_port.c` convierte esos indices a RGB565 en chunks DMA y aplica byte swap antes de llamar a `esp_lcd_panel_draw_bitmap()`.
+El port actual usa `CMAP256`. Doom estira indices de paleta desde `320 x 200` a un framebuffer `320 x 240` en PSRAM. `doom_port.c` convierte esos indices a RGB565, escala a landscape `502 x 376`, rota 90 grados por software y aplica byte swap antes de llamar a `esp_lcd_panel_draw_bitmap()`.
 
 La ruta anterior `-gfxmode rgb565` arrancaba y generaba frames, pero en hardware solo mostraba franjas/pixeles parciales porque dependia de una conversion upstream fragil. `CMAP256` deja el formato de salida bajo control del port ESP32.
 
@@ -625,7 +627,7 @@ Objetivo: mostrar Doom o, si falla el motor, un patron RGB565 de diagnostico por
 | Convertir/enviar chunks RGB565 | `esp_lcd_panel_draw_bitmap()` funciona |
 | Aplicar byte swap | Colores correctos |
 | Alinear area SH8601 | Sin corrupcion de refresco |
-| Centrar `320 x 240` | Imagen visible en panel portrait |
+| Rotar/escalar a landscape | Imagen visible en `502 x 376` sobre panel fisico `410 x 502` |
 
 Criterio: frame visible sin panic. FPS puede ser bajo en esta fase.
 
@@ -692,7 +694,7 @@ Objetivo: solo despues de video/input estable.
 | Doom app o firmware dedicado? | Firmware standalone inicial |
 | WAD desde SD o flash interna? | SD para MVP; flash interna posterior si hace falta |
 | Objetivo de FPS minimo aceptable? | Pendiente de medir en hardware |
-| Orientacion final portrait o landscape? | `320 x 240` portrait centrado para MVP; landscape posterior |
+| Orientacion final portrait o landscape? | Landscape por software activo; validar FPS y orientacion en hardware |
 | Input principal? | Touch por zonas + `BOOT` para MVP |
 | Audio en MVP? | No |
 
@@ -707,7 +709,7 @@ Implementar primero:
 | Motor | DoomGeneric |
 | Assets | WAD aportado por usuario en microSD |
 | Render | Directo SH8601/QSPI, sin LVGL |
-| Resolucion | `320 x 240` centrado, Doom interno `320 x 200` aspect-correct |
+| Resolucion | Doom interno `320 x 200`, framebuffer `320 x 240`, salida landscape `502 x 376` |
 | Audio | Deshabilitado con `-nosound -nomusic` |
 | Input | Touch por zonas + `BOOT`; `PWR` excluido |
 | Medicion | FPS, heap interna, PSRAM, stack, tamano firmware |

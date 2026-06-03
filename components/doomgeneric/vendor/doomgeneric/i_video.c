@@ -329,31 +329,22 @@ void I_FinishUpdate (void)
     memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY);
 
     int scaled_width = SCREENWIDTH * fb_scaling;
-    int scaled_height = SCREENHEIGHT * fb_scaling;
     int x_offset = (DOOMGENERIC_RESX - scaled_width) / 2;
-    int y_offset = (DOOMGENERIC_RESY - scaled_height) / 2;
 
     if (x_offset < 0) {
         x_offset = 0;
     }
-    if (y_offset < 0) {
-        y_offset = 0;
-    }
 
-    for (int y = 0; y < SCREENHEIGHT; y++) {
-        const unsigned char *line_in = (const unsigned char *)I_VideoBuffer + y * SCREENWIDTH;
+    for (int y = 0; y < DOOMGENERIC_RESY; y++) {
+        int src_y = (y * SCREENHEIGHT) / DOOMGENERIC_RESY;
+        const unsigned char *line_in = (const unsigned char *)I_VideoBuffer + src_y * SCREENWIDTH;
+        unsigned char *line_out = (unsigned char *)DG_ScreenBuffer + y * DOOMGENERIC_RESX + x_offset;
 
-        for (int ys = 0; ys < fb_scaling; ys++) {
-            unsigned char *line_out = (unsigned char *)DG_ScreenBuffer
-                                    + (y_offset + y * fb_scaling + ys) * DOOMGENERIC_RESX
-                                    + x_offset;
-
-            if (fb_scaling == 1) {
-                memcpy(line_out, line_in, SCREENWIDTH);
-            } else {
-                for (int x = 0; x < SCREENWIDTH; x++) {
-                    memset(line_out + x * fb_scaling, line_in[x], fb_scaling);
-                }
+        if (fb_scaling == 1) {
+            memcpy(line_out, line_in, SCREENWIDTH);
+        } else {
+            for (int x = 0; x < SCREENWIDTH; x++) {
+                memset(line_out + x * fb_scaling, line_in[x], fb_scaling);
             }
         }
     }

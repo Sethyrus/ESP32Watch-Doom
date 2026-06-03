@@ -20,15 +20,23 @@
 #define DOOM_PORT_FRAME_W DOOMGENERIC_RESX
 #define DOOM_PORT_FRAME_H DOOMGENERIC_RESY
 #define DOOM_PORT_CHUNK_LINES 20
-#define DOOM_PORT_CENTER_X (((BSP_LCD_H_RES - DOOM_PORT_FRAME_W) / 2) & ~1)
-#define DOOM_PORT_CENTER_Y (((BSP_LCD_V_RES - DOOM_PORT_FRAME_H) / 2) & ~1)
+#define DOOM_PORT_LANDSCAPE 1
+#define DOOM_PORT_LANDSCAPE_CLOCKWISE 1
+#define DOOM_PORT_LOGICAL_W BSP_LCD_V_RES
+#define DOOM_PORT_LOGICAL_H BSP_LCD_H_RES
+#define DOOM_PORT_GAME_W BSP_LCD_V_RES
+#define DOOM_PORT_GAME_H 376
+#define DOOM_PORT_GAME_X ((DOOM_PORT_LOGICAL_W - DOOM_PORT_GAME_W) / 2)
+#define DOOM_PORT_GAME_Y ((DOOM_PORT_LOGICAL_H - DOOM_PORT_GAME_H) / 2)
 #define DOOM_PORT_BOOT_GPIO GPIO_NUM_0
 #define DOOM_PORT_BOOT_DEBOUNCE_US 30000
 #define DOOM_PORT_EVENT_QUEUE_LEN 32
-#define DOOM_PORT_TOUCH_CENTER_X_MIN 140
-#define DOOM_PORT_TOUCH_CENTER_X_MAX 270
-#define DOOM_PORT_TOUCH_CENTER_Y_MIN 200
-#define DOOM_PORT_TOUCH_CENTER_Y_MAX 330
+#define DOOM_PORT_TOUCH_CENTER_W 160
+#define DOOM_PORT_TOUCH_CENTER_H 130
+#define DOOM_PORT_TOUCH_CENTER_X_MIN ((DOOM_PORT_LOGICAL_W - DOOM_PORT_TOUCH_CENTER_W) / 2)
+#define DOOM_PORT_TOUCH_CENTER_X_MAX (DOOM_PORT_TOUCH_CENTER_X_MIN + DOOM_PORT_TOUCH_CENTER_W)
+#define DOOM_PORT_TOUCH_CENTER_Y_MIN ((DOOM_PORT_LOGICAL_H - DOOM_PORT_TOUCH_CENTER_H) / 2)
+#define DOOM_PORT_TOUCH_CENTER_Y_MAX (DOOM_PORT_TOUCH_CENTER_Y_MIN + DOOM_PORT_TOUCH_CENTER_H)
 #define DOOM_PORT_TOUCH_MENU_CORNER_PX 90
 
 static const char *TAG = "doom_port";
@@ -73,6 +81,9 @@ static bool s_boot_raw;
 static bool s_boot_stable;
 static int64_t s_boot_last_change_us;
 static bool s_input_ready;
+static bool s_landscape_map_ready;
+static int16_t s_landscape_src_x_by_phys_y[BSP_LCD_V_RES];
+static int16_t s_landscape_src_y_by_phys_x[BSP_LCD_H_RES];
 
 static uint16_t rgb565_swap(uint16_t color)
 {
@@ -84,6 +95,50 @@ static uint16_t rgb565_from_color(struct color color)
     return (uint16_t)(((uint16_t)(color.r & 0xF8) << 8) |
                       ((uint16_t)(color.g & 0xFC) << 3) |
                       ((uint16_t)color.b >> 3));
+}
+
+static void physical_to_logical(int phys_x, int phys_y, int *logical_x, int *logical_y)
+{
+#if DOOM_PORT_LANDSCAPE_CLOCKWISE
+    *logical_x = phys_y;
+    *logical_y = BSP_LCD_H_RES - 1 - phys_x;
+#else
+    *logical_x = BSP_LCD_V_RES - 1 - phys_y;
+    *logical_y = phys_x;
+#endif
+}
+
+static void ensure_landscape_map(void)
+{
+    if (s_landscape_map_ready) {
+        return;
+    }
+
+    for (int phys_y = 0; phys_y < BSP_LCD_V_RES; phys_y++) {
+        int logical_x;
+        int logical_y;
+        physical_to_logical(0, phys_y, &logical_x, &logical_y);
+
+        if (logical_x < DOOM_PORT_GAME_X || logical_x >= DOOM_PORT_GAME_X + DOOM_PORT_GAME_W) {
+            s_landscape_src_x_by_phys_y[phys_y] = -1;
+        } else {
+            s_landscape_src_x_by_phys_y[phys_y] = (int16_t)(((logical_x - DOOM_PORT_GAME_X) * DOOM_PORT_FRAME_W) / DOOM_PORT_GAME_W);
+        }
+    }
+
+    for (int phys_x = 0; phys_x < BSP_LCD_H_RES; phys_x++) {
+        int logical_x;
+        int logical_y;
+        physical_to_logical(phys_x, 0, &logical_x, &logical_y);
+
+        if (logical_y < DOOM_PORT_GAME_Y || logical_y >= DOOM_PORT_GAME_Y + DOOM_PORT_GAME_H) {
+            s_landscape_src_y_by_phys_x[phys_x] = -1;
+        } else {
+            s_landscape_src_y_by_phys_x[phys_x] = (int16_t)(((logical_y - DOOM_PORT_GAME_Y) * DOOM_PORT_FRAME_H) / DOOM_PORT_GAME_H);
+        }
+    }
+
+    s_landscape_map_ready = true;
 }
 
 static esp_err_t ensure_draw_buffers(void)
@@ -145,7 +200,7 @@ esp_err_t doom_port_init_input(void)
     s_boot_last_change_us = esp_timer_get_time();
     s_input_ready = true;
 
-    ESP_LOGI(TAG, "Input map: BOOT=fire/enter, touch top-left=menu, center=use/enter, edges=move/turn");
+    ESP_LOGI(TAG, "Input map: landscape touch top-left=menu, center=use/enter, edges=move/turn; BOOT=fire/enter");
     return ESP_OK;
 }
 
@@ -237,23 +292,27 @@ static bool poll_touch_point(uint16_t *x, uint16_t *y)
 
 static void apply_touch_mapping(bool desired[DOOM_INPUT_COUNT], uint16_t x, uint16_t y)
 {
-    if (x < DOOM_PORT_TOUCH_MENU_CORNER_PX && y < DOOM_PORT_TOUCH_MENU_CORNER_PX) {
+    int logical_x;
+    int logical_y;
+    physical_to_logical(x, y, &logical_x, &logical_y);
+
+    if (logical_x < DOOM_PORT_TOUCH_MENU_CORNER_PX && logical_y < DOOM_PORT_TOUCH_MENU_CORNER_PX) {
         desired[DOOM_INPUT_ESCAPE] = true;
         return;
     }
 
-    if (x >= DOOM_PORT_TOUCH_CENTER_X_MIN && x <= DOOM_PORT_TOUCH_CENTER_X_MAX &&
-        y >= DOOM_PORT_TOUCH_CENTER_Y_MIN && y <= DOOM_PORT_TOUCH_CENTER_Y_MAX) {
+    if (logical_x >= DOOM_PORT_TOUCH_CENTER_X_MIN && logical_x <= DOOM_PORT_TOUCH_CENTER_X_MAX &&
+        logical_y >= DOOM_PORT_TOUCH_CENTER_Y_MIN && logical_y <= DOOM_PORT_TOUCH_CENTER_Y_MAX) {
         desired[DOOM_INPUT_USE] = true;
         desired[DOOM_INPUT_ENTER] = true;
         return;
     }
 
-    if (y < BSP_LCD_V_RES / 3) {
+    if (logical_y < DOOM_PORT_LOGICAL_H / 3) {
         desired[DOOM_INPUT_UP] = true;
-    } else if (y > (BSP_LCD_V_RES * 2) / 3) {
+    } else if (logical_y > (DOOM_PORT_LOGICAL_H * 2) / 3) {
         desired[DOOM_INPUT_DOWN] = true;
-    } else if (x < BSP_LCD_H_RES / 2) {
+    } else if (logical_x < DOOM_PORT_LOGICAL_W / 2) {
         desired[DOOM_INPUT_LEFT] = true;
     } else {
         desired[DOOM_INPUT_RIGHT] = true;
@@ -371,9 +430,10 @@ static esp_err_t draw_doom_frame(void)
     }
 
     const uint8_t *src_frame = (const uint8_t *)DG_ScreenBuffer;
+    ensure_landscape_map();
 
-    for (int y = 0; y < DOOM_PORT_FRAME_H; y += DOOM_PORT_CHUNK_LINES) {
-        int lines = DOOM_PORT_FRAME_H - y;
+    for (int y = 0; y < BSP_LCD_V_RES; y += DOOM_PORT_CHUNK_LINES) {
+        int lines = BSP_LCD_V_RES - y;
         if (lines > DOOM_PORT_CHUNK_LINES) {
             lines = DOOM_PORT_CHUNK_LINES;
         }
@@ -381,19 +441,26 @@ static esp_err_t draw_doom_frame(void)
         uint16_t *draw_buffer = next_draw_buffer();
 
         for (int row = 0; row < lines; row++) {
-            const uint8_t *src = src_frame + (y + row) * DOOM_PORT_FRAME_W;
-            uint16_t *dst = draw_buffer + row * DOOM_PORT_FRAME_W;
+            int16_t src_x = s_landscape_src_x_by_phys_y[y + row];
+            uint16_t *dst = draw_buffer + row * BSP_LCD_H_RES;
 
-            for (int x = 0; x < DOOM_PORT_FRAME_W; x++) {
-                dst[x] = rgb565_swap(rgb565_from_color(colors[src[x]]));
+            for (int x = 0; x < BSP_LCD_H_RES; x++) {
+                int16_t src_y = s_landscape_src_y_by_phys_x[x];
+                if (src_x < 0 || src_y < 0) {
+                    dst[x] = 0;
+                    continue;
+                }
+
+                uint8_t color_index = src_frame[src_y * DOOM_PORT_FRAME_W + src_x];
+                dst[x] = rgb565_swap(rgb565_from_color(colors[color_index]));
             }
         }
 
         err = esp_lcd_panel_draw_bitmap(s_panel,
-                                        DOOM_PORT_CENTER_X,
-                                        DOOM_PORT_CENTER_Y + y,
-                                        DOOM_PORT_CENTER_X + DOOM_PORT_FRAME_W,
-                                        DOOM_PORT_CENTER_Y + y + lines,
+                                        0,
+                                        y,
+                                        BSP_LCD_H_RES,
+                                        y + lines,
                                         draw_buffer);
         if (err != ESP_OK) {
             return err;
