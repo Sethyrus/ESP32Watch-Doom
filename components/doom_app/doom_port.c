@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "bsp/display.h"
+#include "bsp/esp-bsp.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -39,11 +40,19 @@
 #define DOOM_PORT_TOUCH_CENTER_Y_MAX (DOOM_PORT_TOUCH_CENTER_Y_MIN + DOOM_PORT_TOUCH_CENTER_H)
 #define DOOM_PORT_TOUCH_MENU_CORNER_PX 90
 
+#define AXP2101_ADDR 0x34
+#define AXP2101_INTEN2 0x41
+#define AXP2101_INTSTS2 0x49
+#define AXP2101_PKEY_SHORT_IRQ_BIT (1 << 3)
+
 static const char *TAG = "doom_port";
 static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
+static i2c_master_dev_handle_t s_axp2101_dev = NULL;
 static uint16_t *s_draw_buffers[2];
 static uint8_t s_next_draw_buffer;
+static uint16_t s_palette_swapped[256];
+static bool s_palette_ready;
 
 typedef enum {
     DOOM_INPUT_UP,
@@ -200,7 +209,26 @@ esp_err_t doom_port_init_input(void)
     s_boot_last_change_us = esp_timer_get_time();
     s_input_ready = true;
 
-    ESP_LOGI(TAG, "Input map: landscape touch top-left=menu, center=use/enter, edges=move/turn; BOOT=fire/enter");
+    // Enable AXP2101 short press interrupt (INTEN2 bit 5)
+    i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
+    if (i2c_bus) {
+        i2c_device_config_t dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = AXP2101_ADDR,
+            .scl_speed_hz = 400000,
+        };
+        esp_err_t err_add = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &s_axp2101_dev);
+        if (err_add == ESP_OK && s_axp2101_dev != NULL) {
+            uint8_t enable_data[2] = {AXP2101_INTEN2, 0x00};
+            // Read current INTEN2
+            i2c_master_transmit_receive(s_axp2101_dev, &enable_data[0], 1, &enable_data[1], 1, -1);
+            // Set bit 5
+            enable_data[1] |= AXP2101_PKEY_SHORT_IRQ_BIT;
+            i2c_master_transmit(s_axp2101_dev, enable_data, 2, -1);
+        }
+    }
+
+    ESP_LOGI(TAG, "Input map: landscape touch center=use/enter, edges=move/turn; BOOT=fire/enter; PWR=menu");
     return ESP_OK;
 }
 
@@ -296,11 +324,6 @@ static void apply_touch_mapping(bool desired[DOOM_INPUT_COUNT], uint16_t x, uint
     int logical_y;
     physical_to_logical(x, y, &logical_x, &logical_y);
 
-    if (logical_x < DOOM_PORT_TOUCH_MENU_CORNER_PX && logical_y < DOOM_PORT_TOUCH_MENU_CORNER_PX) {
-        desired[DOOM_INPUT_ESCAPE] = true;
-        return;
-    }
-
     if (logical_x >= DOOM_PORT_TOUCH_CENTER_X_MIN && logical_x <= DOOM_PORT_TOUCH_CENTER_X_MAX &&
         logical_y >= DOOM_PORT_TOUCH_CENTER_Y_MIN && logical_y <= DOOM_PORT_TOUCH_CENTER_Y_MAX) {
         desired[DOOM_INPUT_USE] = true;
@@ -326,6 +349,19 @@ static void poll_input(void)
     bool boot_pressed = poll_boot_button();
     desired[DOOM_INPUT_FIRE] = boot_pressed;
     desired[DOOM_INPUT_ENTER] = boot_pressed;
+
+    // Check AXP2101 for PWR button short press
+    if (s_axp2101_dev) {
+        uint8_t reg = AXP2101_INTSTS2;
+        uint8_t status = 0;
+        esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &reg, 1, &status, 1, pdMS_TO_TICKS(5));
+        if (err == ESP_OK && (status & AXP2101_PKEY_SHORT_IRQ_BIT)) {
+            desired[DOOM_INPUT_ESCAPE] = true;
+            // Clear interrupt
+            uint8_t clear_data[2] = {AXP2101_INTSTS2, AXP2101_PKEY_SHORT_IRQ_BIT};
+            i2c_master_transmit(s_axp2101_dev, clear_data, 2, pdMS_TO_TICKS(5));
+        }
+    }
 
     uint16_t x = 0;
     uint16_t y = 0;
@@ -432,6 +468,14 @@ static esp_err_t draw_doom_frame(void)
     const uint8_t *src_frame = (const uint8_t *)DG_ScreenBuffer;
     ensure_landscape_map();
 
+    if (palette_changed || !s_palette_ready) {
+        for (int i = 0; i < 256; i++) {
+            s_palette_swapped[i] = rgb565_swap(rgb565_from_color(colors[i]));
+        }
+        palette_changed = false;
+        s_palette_ready = true;
+    }
+
     for (int y = 0; y < BSP_LCD_V_RES; y += DOOM_PORT_CHUNK_LINES) {
         int lines = BSP_LCD_V_RES - y;
         if (lines > DOOM_PORT_CHUNK_LINES) {
@@ -451,8 +495,7 @@ static esp_err_t draw_doom_frame(void)
                     continue;
                 }
 
-                uint8_t color_index = src_frame[src_y * DOOM_PORT_FRAME_W + src_x];
-                dst[x] = rgb565_swap(rgb565_from_color(colors[color_index]));
+                dst[x] = s_palette_swapped[src_frame[src_y * DOOM_PORT_FRAME_W + src_x]];
             }
         }
 

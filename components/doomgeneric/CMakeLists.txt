@@ -86,7 +86,7 @@ set(DOOMGENERIC_SRCS
 idf_component_register(
     SRCS ${DOOMGENERIC_SRCS}
     INCLUDE_DIRS ${DOOMGENERIC_DIR}
-    REQUIRES heap
+    REQUIRES heap freertos log
 )
 
 target_compile_definitions(${COMPONENT_LIB} PUBLIC

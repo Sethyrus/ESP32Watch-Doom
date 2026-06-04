@@ -25,6 +25,9 @@
 
 #ifdef ESP_PLATFORM
 #include "esp_heap_caps.h"
+#include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #endif
 
 #ifdef _WIN32
@@ -478,8 +481,13 @@ void I_Error (char *error, ...)
     // abort();
 #if ORIGCODE
     SDL_Quit();
-
     exit(-1);
+#elif defined(ESP_PLATFORM)
+    // exit() triggers abort() on ESP-IDF → panic → reboot loop.
+    // Suspend the task so the error remains visible on the monitor.
+    ESP_LOGE("doom", "I_Error: fatal error, suspending doom task");
+    vTaskSuspend(NULL);
+    while (1) { vTaskDelay(portMAX_DELAY); }
 #else
     exit(-1);
 #endif
