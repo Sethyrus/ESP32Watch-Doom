@@ -255,7 +255,8 @@ Estado actual:
 - El ejemplo ESP-IDF oficial usa `PMU_I2C_SDA=15`, `PMU_I2C_SCL=14`, direccion `0x34` y `PMU_INTERRUPT_PIN=-1`.
 - El ejemplo oficial llama `PMU.disableTSPinMeasure()` porque la placa no tiene deteccion de temperatura de bateria en TS; dejar TS activo puede causar carga anomala.
 - El esquematico conecta el boton `PWR` al `PWRON` del AXP2101; la wiki describe lectura logica por `EXIO6`.
-- Si se integra, hacerlo como componente separado o driver minimo propio.
+- **Lectura real de PWR**: Para detectar pulsaciones cortas de `PWR` en runtime (ej: usarlo como botón de menú), hay que leer el registro de interrupciones `INTSTS2` (`0x49`) del AXP2101 por I2C (`0x34`). El bit 3 (`1 << 3`) indica una pulsación corta. Hay que habilitarlo primero escribiendo ese mismo bit en `INTEN2` (`0x41`), y limpiarlo escribiendo un `1` tras leerlo.
+- Si se integra completamente, hacerlo como componente separado o driver minimo propio.
 
 Configuracion de carga vista en el ejemplo oficial:
 
@@ -357,7 +358,7 @@ Gotcha Arduino vs ESP-IDF:
 - Mantener `BOOT` mientras se alimenta la placa fuerza modo descarga si el firmware se queda colgado.
 - `PWR` apaga si se mantiene pulsado unos 6 s en estado encendido.
 - `PWR` en apagado enciende la placa con una pulsacion.
-- En runtime, la wiki dice que `PWR` se lee por `EXIO6`, nivel alto al pulsar; el esquematico muestra el boton en la ruta `PWRON` del AXP2101.
+- En runtime, el esquematico muestra el boton en la ruta `PWRON` del AXP2101. Se lee por I2C en la dirección `0x34`, registro `0x49` (INTSTS2), bit 3 para pulsación corta. (Requiere inicializar bit 3 de `0x41` (INTEN2)).
 - No asumir `GPIO10` como PWR: el esquematico lo etiqueta como `SYS_OUT/GPIO10`, ruta de sistema/PMU que requiere validacion propia.
 - Las pulsaciones largas de `PWR` para la app deben durar menos de 6 s para no apagar la placa.
 
