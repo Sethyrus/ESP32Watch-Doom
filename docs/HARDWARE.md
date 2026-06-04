@@ -53,7 +53,7 @@ Estos valores vienen del `Kconfig` del BSP y conviene tratarlos como contrato pr
 | I2C port | `CONFIG_BSP_I2C_NUM=1` | Bus compartido por touch, PMU, RTC, IMU y codecs. |
 | I2C speed | `CONFIG_BSP_I2C_CLK_SPEED_HZ=400000` | Fast mode por defecto. |
 | SPIFFS mount | `/spiffs` | Macro `BSP_SPIFFS_MOUNT_POINT`. |
-| SPIFFS partition | `storage` | Debe existir en `partitions.csv`. |
+| SPIFFS partition | Configurable por rama | En `app/doom`, `storage` es FATFS interno para WAD y no debe montarse como SPIFFS. |
 | SPIFFS max files | `2` | Cambiar en `sdkconfig.defaults` si hace falta. |
 | SD mount | `/sdcard` | Macro `BSP_SD_MOUNT_POINT`. |
 | LVGL buffer height | `40` | `CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT`; reducido desde el default BSP `100` para bajar presion DMA. |

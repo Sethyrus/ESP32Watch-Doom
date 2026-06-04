@@ -71,22 +71,23 @@ Decisiones del baseline:
 - LVGL: v9.3.0 por manifest, con malloc/string/sprintf de libc.
 - BSP: `waveshare/esp32_s3_touch_amoled_2_06`.
 - BSP I2C: port 1, 400 kHz.
-- Mounts BSP: SPIFFS `/spiffs`, SD `/sdcard`.
+- Mounts BSP base: SPIFFS `/spiffs` si existe una particion SPIFFS, SD `/sdcard`.
+- Mounts `app/doom`: FAT interno `/internal` si se embebe WAD, SD `/sdcard` si hay tarjeta.
 
 Nota sobre flash: la wiki y el esquematico indican 32 MB (`GD25Q256EYIGR`), pero los ejemplos ESP-IDF oficiales Waveshare usan 16 MB. Este repo arranca con 16 MB por compatibilidad con esos ejemplos. Si se quiere usar todo el flash, verificar primero con `esptool.py flash_id` y cambiar a `CONFIG_ESPTOOLPY_FLASHSIZE_32MB=y`.
 
 ## Particiones
 
-La tabla actual es single-factory y no tiene OTA slots:
+La tabla de particiones puede variar por rama. La rama `app/doom` usa una tabla single-factory sin OTA slots:
 
 | Particion | Tipo | Tamano | Uso |
 | --- | --- | --- | --- |
 | `nvs` | data/nvs | `0x6000` | Config pequena, calibraciones, preferencias. |
 | `phy_init` | data/phy | `0x1000` | Datos PHY ESP-IDF. |
-| `factory` | app/factory | `8M` | Firmware principal. |
-| `storage` | data/spiffs | `7M` | SPIFFS montado por BSP como `/spiffs`. |
+| `factory` | app/factory | `3M` | Firmware standalone Doom. |
+| `storage` | data/fat | `12M` | FAT read-only montado como `/internal` cuando hay WAD embebido. |
 
-No hay particion de coredump ni OTA. Si se necesita OTA, crash dumps persistentes o assets grandes en flash, redisenar `partitions.csv` antes de construir muchas apps.
+No hay particion de coredump ni OTA en `app/doom`. En esa rama, `storage` no es SPIFFS: es FATFS para un WAD embebido. Si se necesita OTA, crash dumps persistentes, SPIFFS para apps normales o assets mas grandes, redisenar `partitions.csv` antes de escribir codigo que dependa de offsets/tamanos.
 
 ## VS Code
 

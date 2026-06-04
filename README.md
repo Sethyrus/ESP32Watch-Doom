@@ -2,7 +2,9 @@
 
 Firmware ESP-IDF para la placa Waveshare `ESP32-S3-Touch-AMOLED-2.06`.
 
-La base actual usa `ESP-IDF 5.5.4`, `LVGL` y el BSP oficial de Waveshare. No usa ESP-Brookesia por defecto: el objetivo inicial es tener una base simple, estable y directa para validar pantalla, touch, brillo y perifericos antes de construir una capa de apps mas compleja.
+La base del proyecto usa `ESP-IDF 5.5.4`, `LVGL` y el BSP oficial de Waveshare. No usa ESP-Brookesia por defecto: el objetivo es tener una base simple, estable y directa para validar pantalla, touch, brillo y perifericos antes de construir una capa de apps mas compleja.
+
+La rama `app/doom` reemplaza ese bootstrap por un firmware standalone de Doom; sus decisiones especificas estan documentadas en `docs/DOOM_PORT.md`.
 
 ## Hardware Objetivo
 
@@ -33,7 +35,7 @@ Si el shell no encuentra `idf.py`, falta ejecutar el `source` anterior o el ento
 
 ## Estructura
 
-- `main/main.c`: entrada `app_main()` y demo minima LVGL+BSP.
+- `main/main.c`: entrada `app_main()`; el bootstrap concreto puede variar por rama.
 - `main/idf_component.yml`: dependencias del componente principal.
 - `sdkconfig.defaults`: configuracion durable del proyecto.
 - `partitions.csv`: tabla de particiones durable.
@@ -49,4 +51,4 @@ Si el shell no encuentra `idf.py`, falta ejecutar el `source` anterior o el ento
 
 ## Estado Actual
 
-La app arranca el BSP, inicializa LVGL, enciende la pantalla y muestra una pantalla de prueba. Es intencionadamente pequena para validar toolchain, dependencias, PSRAM, QSPI display y LVGL antes de anadir mas perifericos o una arquitectura de apps.
+La rama base arranca el BSP, inicializa LVGL, enciende la pantalla y muestra una pantalla de prueba. La rama `app/doom` arranca Doom standalone, busca un WAD legal aportado por el usuario y no usa LVGL en runtime; ver `docs/DOOM_PORT.md` para el estado detallado.
