@@ -326,13 +326,15 @@ void I_UpdateNoBlit (void)
 void I_FinishUpdate (void)
 {
 #ifdef CMAP256
-    memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY);
-
     int scaled_width = SCREENWIDTH * fb_scaling;
     int x_offset = (DOOMGENERIC_RESX - scaled_width) / 2;
 
     if (x_offset < 0) {
         x_offset = 0;
+    }
+
+    if (x_offset > 0 || scaled_width < DOOMGENERIC_RESX) {
+        memset(DG_ScreenBuffer, 0, DOOMGENERIC_RESX * DOOMGENERIC_RESY);
     }
 
     for (int y = 0; y < DOOMGENERIC_RESY; y++) {

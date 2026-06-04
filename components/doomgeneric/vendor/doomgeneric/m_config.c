@@ -2042,7 +2042,7 @@ float M_GetFloatVariable(char *name)
 
 static char *GetDefaultConfigDir(void)
 {
-    return strdup("/sdcard");
+    return strdup("/sdcard/");
 }
 
 // 

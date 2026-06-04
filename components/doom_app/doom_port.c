@@ -39,6 +39,7 @@
 #define DOOM_PORT_TOUCH_CENTER_Y_MIN ((DOOM_PORT_LOGICAL_H - DOOM_PORT_TOUCH_CENTER_H) / 2)
 #define DOOM_PORT_TOUCH_CENTER_Y_MAX (DOOM_PORT_TOUCH_CENTER_Y_MIN + DOOM_PORT_TOUCH_CENTER_H)
 #define DOOM_PORT_TOUCH_MENU_CORNER_PX 90
+#define DOOM_PORT_STATS_LOG_US 5000000
 
 #define AXP2101_ADDR 0x34
 #define AXP2101_INTEN2 0x41
@@ -93,6 +94,12 @@ static bool s_input_ready;
 static bool s_landscape_map_ready;
 static int16_t s_landscape_src_x_by_phys_y[BSP_LCD_V_RES];
 static int16_t s_landscape_src_y_by_phys_x[BSP_LCD_H_RES];
+static uint32_t s_input_queue_drops;
+static uint32_t s_touch_read_errors;
+static uint32_t s_axp_read_errors;
+static uint32_t s_axp_write_errors;
+static uint32_t s_pwr_short_events;
+static uint32_t s_draw_errors;
 
 static uint16_t rgb565_swap(uint16_t color)
 {
@@ -209,7 +216,7 @@ esp_err_t doom_port_init_input(void)
     s_boot_last_change_us = esp_timer_get_time();
     s_input_ready = true;
 
-    // Enable AXP2101 short press interrupt (INTEN2 bit 5)
+    // Enable AXP2101 short press interrupt (INTEN2 bit 3).
     i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
     if (i2c_bus) {
         i2c_device_config_t dev_cfg = {
@@ -221,10 +228,15 @@ esp_err_t doom_port_init_input(void)
         if (err_add == ESP_OK && s_axp2101_dev != NULL) {
             uint8_t enable_data[2] = {AXP2101_INTEN2, 0x00};
             // Read current INTEN2
-            i2c_master_transmit_receive(s_axp2101_dev, &enable_data[0], 1, &enable_data[1], 1, -1);
-            // Set bit 5
-            enable_data[1] |= AXP2101_PKEY_SHORT_IRQ_BIT;
-            i2c_master_transmit(s_axp2101_dev, enable_data, 2, -1);
+            esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &enable_data[0], 1, &enable_data[1], 1, -1);
+            if (err == ESP_OK) {
+                enable_data[1] |= AXP2101_PKEY_SHORT_IRQ_BIT;
+                err = i2c_master_transmit(s_axp2101_dev, enable_data, 2, -1);
+            }
+            if (err != ESP_OK) {
+                ESP_LOGW(TAG, "PWR short-press IRQ enable failed: %s", esp_err_to_name(err));
+                s_axp2101_dev = NULL;
+            }
         }
     }
 
@@ -237,6 +249,7 @@ static bool queue_input_event(int pressed, unsigned char key)
     uint8_t next_head = (uint8_t)((s_input_event_head + 1) % DOOM_PORT_EVENT_QUEUE_LEN);
     if (next_head == s_input_event_tail) {
         ESP_LOGW(TAG, "Input event queue full; dropping key %u", (unsigned)key);
+        s_input_queue_drops++;
         return false;
     }
 
@@ -303,6 +316,7 @@ static bool poll_touch_point(uint16_t *x, uint16_t *y)
             ESP_LOGW(TAG, "Touch read failed: %s", esp_err_to_name(err));
             last_warn_us = now_us;
         }
+        s_touch_read_errors++;
         return false;
     }
 
@@ -354,12 +368,18 @@ static void poll_input(void)
     if (s_axp2101_dev) {
         uint8_t reg = AXP2101_INTSTS2;
         uint8_t status = 0;
-        esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &reg, 1, &status, 1, pdMS_TO_TICKS(5));
+        esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &reg, 1, &status, 1, 5);
         if (err == ESP_OK && (status & AXP2101_PKEY_SHORT_IRQ_BIT)) {
             desired[DOOM_INPUT_ESCAPE] = true;
+            s_pwr_short_events++;
             // Clear interrupt
             uint8_t clear_data[2] = {AXP2101_INTSTS2, AXP2101_PKEY_SHORT_IRQ_BIT};
-            i2c_master_transmit(s_axp2101_dev, clear_data, 2, pdMS_TO_TICKS(5));
+            err = i2c_master_transmit(s_axp2101_dev, clear_data, 2, 5);
+            if (err != ESP_OK) {
+                s_axp_write_errors++;
+            }
+        } else if (err != ESP_OK) {
+            s_axp_read_errors++;
         }
     }
 
@@ -529,32 +549,59 @@ void DG_DrawFrame(void)
 {
     static uint32_t frame_count;
     static int64_t last_log_us;
+    static uint64_t draw_total_us;
+    static uint32_t draw_max_us;
 
+    int64_t draw_start_us = esp_timer_get_time();
     esp_err_t err = draw_doom_frame();
+    int64_t draw_us = esp_timer_get_time() - draw_start_us;
     if (err != ESP_OK) {
+        s_draw_errors++;
         ESP_LOGW(TAG, "Draw frame skipped: %s", esp_err_to_name(err));
         DG_SleepMs(1000);
         return;
     }
 
     frame_count++;
+    draw_total_us += (uint64_t)draw_us;
+    if (draw_us > draw_max_us) {
+        draw_max_us = (uint32_t)draw_us;
+    }
 
     int64_t now_us = esp_timer_get_time();
-    if (now_us - last_log_us >= 5000000) {
+    if (now_us - last_log_us >= DOOM_PORT_STATS_LOG_US) {
         uint32_t fps = 0;
+        uint32_t draw_avg_us = frame_count > 0 ? (uint32_t)(draw_total_us / frame_count) : 0;
 
         if (last_log_us != 0) {
             fps = (uint32_t)((frame_count * 1000000ULL) / (now_us - last_log_us));
         }
 
         ESP_LOGI(TAG,
-                 "DG_DrawFrame: frames=%" PRIu32 " fps=%" PRIu32 " internal=%u psram=%u",
+                 "DG_DrawFrame: frames=%" PRIu32 " fps=%" PRIu32 " draw_avg_us=%" PRIu32 " draw_max_us=%" PRIu32
+                 " internal=%u/%u min=%u psram=%u/%u min=%u stack_free=%u draw_err=%" PRIu32
+                 " input_drop=%" PRIu32 " touch_err=%" PRIu32 " axp_rd_err=%" PRIu32 " axp_wr_err=%" PRIu32 " pwr=%" PRIu32,
                  frame_count,
                  fps,
+                 draw_avg_us,
+                 draw_max_us,
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM),
+                 (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM),
+                 (unsigned)uxTaskGetStackHighWaterMark(NULL),
+                 s_draw_errors,
+                 s_input_queue_drops,
+                 s_touch_read_errors,
+                 s_axp_read_errors,
+                 s_axp_write_errors,
+                 s_pwr_short_events);
 
         frame_count = 0;
+        draw_total_us = 0;
+        draw_max_us = 0;
         last_log_us = now_us;
     }
 }
@@ -576,9 +623,15 @@ uint32_t DG_GetTicksMs(void)
 
 int DG_GetKey(int *pressed, unsigned char *key)
 {
+    doom_input_event_t event;
+    if (dequeue_input_event(&event)) {
+        *pressed = event.pressed;
+        *key = event.key;
+        return 1;
+    }
+
     poll_input();
 
-    doom_input_event_t event;
     if (!dequeue_input_event(&event)) {
         return 0;
     }

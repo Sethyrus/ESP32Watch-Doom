@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "esp_codec_dev.h"
 #include "doomgeneric.h"
 
@@ -25,6 +26,7 @@ static const char *TAG = "doom_sound";
 #define SFX_HEADER_BYTES 8
 #define SFX_PAD_BYTES 16
 #define SFX_MIN_DMX_LENGTH 49
+#define AUDIO_STATS_LOG_US 5000000
 
 typedef struct {
     const uint8_t *samples;
@@ -120,6 +122,11 @@ static bool parse_dmx_sfx(sfxinfo_t *sfxinfo, sfx_lump_view_t *view)
 static void audio_task(void *arg)
 {
     int16_t mix_buffer[BUFFER_SAMPLES * 2]; // Stereo buffer
+    uint32_t buffer_count = 0;
+    uint32_t write_errors = 0;
+    uint64_t write_total_us = 0;
+    uint32_t write_max_us = 0;
+    int64_t last_log_us = esp_timer_get_time();
 
     while (1) {
         if (!s_sound_initialized) {
@@ -163,13 +170,40 @@ static void audio_task(void *arg)
 
         if (s_codec) {
             // Write to I2S via esp_codec_dev
+            int64_t write_start_us = esp_timer_get_time();
             int ret = esp_codec_dev_write(s_codec, mix_buffer, sizeof(mix_buffer));
+            int64_t write_us = esp_timer_get_time() - write_start_us;
+            buffer_count++;
+            write_total_us += (uint64_t)write_us;
+            if (write_us > write_max_us) {
+                write_max_us = (uint32_t)write_us;
+            }
             if (ret != ESP_CODEC_DEV_OK) {
+                write_errors++;
                 // If it fails, wait a bit so we don't spin endlessly
                 vTaskDelay(pdMS_TO_TICKS(10));
             }
         } else {
             vTaskDelay(pdMS_TO_TICKS(10)); // Shouldn't happen, but just in case
+        }
+
+        int64_t now_us = esp_timer_get_time();
+        if (now_us - last_log_us >= AUDIO_STATS_LOG_US) {
+            uint32_t writes_per_sec = (uint32_t)((buffer_count * 1000000ULL) / (now_us - last_log_us));
+            uint32_t write_avg_us = buffer_count > 0 ? (uint32_t)(write_total_us / buffer_count) : 0;
+            ESP_LOGI(TAG,
+                     "audio: buffers=%" PRIu32 "/s write_avg_us=%" PRIu32 " write_max_us=%" PRIu32
+                     " write_err=%" PRIu32 " stack_free=%u",
+                     writes_per_sec,
+                     write_avg_us,
+                     write_max_us,
+                     write_errors,
+                     (unsigned)uxTaskGetStackHighWaterMark(NULL));
+            buffer_count = 0;
+            write_errors = 0;
+            write_total_us = 0;
+            write_max_us = 0;
+            last_log_us = now_us;
         }
     }
 }

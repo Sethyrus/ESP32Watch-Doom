@@ -169,6 +169,9 @@ static void doom_task(void *arg)
         } else {
             ESP_LOGI(TAG, "Working directory set to %s", BSP_SD_MOUNT_POINT);
         }
+        ESP_LOGI(TAG, "Doom config and savegames use %s/", BSP_SD_MOUNT_POINT);
+    } else {
+        ESP_LOGW(TAG, "SD not mounted; Doom config/savegame persistence is unavailable");
     }
 
     // Search for WAD files

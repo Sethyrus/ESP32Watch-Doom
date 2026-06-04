@@ -13,7 +13,7 @@ Valorar y planificar un port jugable de Doom para la placa Waveshare `ESP32-S3-T
 | MCU | `ESP32-S3R8`, dual-core LX7, 240 MHz |
 | PSRAM | 8 MB octal, 80 MHz |
 | Display | AMOLED 410 x 502, QSPI, SH8601, RGB565 |
-| Storage inicial | microSD por BSP SDMMC 1-bit |
+| Storage actual | FAT interno opcional para WAD embebido + microSD por BSP SDMMC 1-bit |
 | Modo Doom inicial | Firmware standalone, no app dentro de shell LVGL |
 | UI general | LVGL sigue siendo baseline para apps normales, pero Doom no lo usa en runtime MVP |
 | Licencia motor | GPL aceptada para esta rama/firmware Doom |
@@ -28,12 +28,12 @@ El objetivo inicial no es un producto final. El primer hito es que el firmware s
 | Prioridad inmediata | Llegar a `idf.py build` OK | Permite iterar sobre errores reales antes de optimizar |
 | Motor | `DoomGeneric` | Menor superficie de port: `DG_*`, timing, input, display y storage |
 | Licencia | Aceptar GPL para esta rama | Es la via practica para usar DoomGeneric/Doom source |
-| Assets | WAD aportado por usuario en microSD | Evita commitear assets y tocar particiones al inicio |
+| Assets | WAD aportado por usuario en `wad/` para FAT interno o en microSD | Evita commitear assets y permite arrancar sin SD si el WAD se embebe |
 | Render | Directo SH8601/QSPI con `bsp_display_new()` | Evita LVGL/task/locks durante el bucle Doom |
 | LVGL | No usar en runtime Doom MVP | Menos overhead y menos riesgo de threading |
-| Audio | Deshabilitado inicialmente | Evita I2S/codec/mixer hasta tener video estable |
+| Audio | SFX activo por ES8311; musica deshabilitada | El audio ya funciona y se mantiene como feature real; MIDI/MUS queda fuera |
 | Input MVP | Touch por zonas + `BOOT` | Hardware disponible sin accesorios externos |
-| `PWR` | No usar en MVP | Pasa por AXP2101/PWRON y puede apagar la placa |
+| `PWR` | Pulsacion corta como menu/escape via AXP2101 | Validado como feature real; evitar long press cercano a 6 s porque apaga la placa |
 
 Regla de trabajo: si hay conflicto entre hacerlo perfecto y hacerlo compilar, primero compilar con stubs limpios y logs accionables. La funcionalidad se completa en fases posteriores sin esconder warnings ni desactivar diagnosticos globalmente.
 
@@ -53,11 +53,11 @@ Secuencia inicial de desarrollo, cuando se autorice empezar:
 | 8 | Anadir input minimo touch + `BOOT` | Eventos `keydown/keyup` limpios |
 | 9 | Medir FPS, heap y stack | Logs cada 5 s sin panic |
 
-El desarrollo no debe tocar `partitions.csv` ni `sdkconfig.defaults` salvo que el build o el tamano final lo exijan y la razon quede documentada.
+El desarrollo inicial evitaba tocar `partitions.csv`. La rama actual ya usa una particion FAT `storage` para WAD interno, por lo que los cambios de particion deben mantenerse documentados.
 
 ## Estado De Implementacion
 
-Hito compile-first completado; bring-up inicial de display/SD/input implementado; render landscape por software activo.
+Hito compile-first completado; bring-up inicial de display/storage/input/audio implementado; render landscape por software activo.
 
 | Area | Estado |
 | --- | --- |
@@ -69,19 +69,21 @@ Hito compile-first completado; bring-up inicial de display/SD/input implementado
 | BSP/LVGL | Dependencias conservadas para la siguiente fase, pero no usadas en runtime Doom actual |
 | Display | Directo por BSP `bsp_display_new()`, brillo 80%, patron diagnostico RGB565 si no hay WAD |
 | Render Doom | `CMAP256`: Doom estira `320 x 200` a `320 x 240`; `DG_DrawFrame()` escala/rota a landscape `502 x 376` dentro del panel `410 x 502` |
-| Storage | `bsp_sdcard_mount()` antes de comprobar `/sdcard/doom1.wad`; si falta WAD, deja pantalla diagnostica y suspende la tarea |
-| Input | Touch transformado a coordenadas landscape + `BOOT` GPIO0 con cola de eventos `keydown`/`keyup` |
-| Audio | Deshabilitado por argv con `-nosound -nomusic` |
+| Storage | Monta FAT interno `/internal` si hay WAD embebido y tambien intenta montar SD `/sdcard`; busca `/internal/doom.wad`, `/internal/doom1.wad`, `/sdcard/doom.wad`, `/sdcard/doom1.wad` |
+| Persistencia | Config y savegames usan `/sdcard/`; si se arranca con WAD interno sin SD, Doom puede jugar pero no hay persistencia de config/savegames |
+| Input | Touch transformado a coordenadas landscape + `BOOT` GPIO0 + pulsacion corta `PWR` via AXP2101 con cola de eventos `keydown`/`keyup` |
+| Audio | SFX activo por ES8311/I2S a 22050 Hz; musica deshabilitada con `-nomusic` |
 | Build | `idf.py build` OK |
-| Tamano binario | `0xa14b0` bytes; slot app `8M`, `0x75eb50` bytes libres |
-| Memoria tras build | DIRAM usada 293,455 bytes, quedan 48,305; `.ext_ram.bss` reportada como 84,992 bytes |
+| Tamano binario | Medir con `idf.py size` tras cada cambio relevante; slot app actual `3M` |
+| Memoria tras build | Medir tras build; logs runtime reportan heap libre/minimo/largest block y stack |
 
 Parches locales aplicados al vendor:
 
 | Archivo | Cambio | Motivo |
 | --- | --- | --- |
 | `doomgeneric.c` | `DG_ScreenBuffer` usa `sizeof(pixel_t)` y `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna y no sobrerreservar en `CMAP256` |
-| `i_video.c` | `CMAP256` estira `320 x 200` a framebuffer `320 x 240` | Evitar la ruta `rgb565` upstream y corregir aspecto antes del blit final |
+| `i_video.c` | `CMAP256` estira `320 x 200` a framebuffer `320 x 240` y evita limpiar el framebuffer si se sobrescribe completo | Evitar la ruta `rgb565` upstream, corregir aspecto y reducir trabajo redundante |
+| `m_config.c` | Directorio por defecto de config/savegames en `/sdcard/` | Persistencia en SD y ruta correcta para `default.cfg`/`doom.cfg` |
 | `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM` | `-mb 4` debe ir a PSRAM y no debe llamar `zenity/system()` |
 | `r_plane.c` | `visplanes` usa `EXT_RAM_BSS_ATTR` | Resolver overflow DRAM manteniendo limite `MAXVISPLANES=128` |
 | `vendor/.gitignore` | Ya no ignora la carpeta fuente `doomgeneric/` | Evitar que el vendor quede incompleto |
@@ -92,9 +94,10 @@ Comportamiento runtime esperado despues del bring-up:
 
 | Caso | Resultado esperado |
 | --- | --- |
-| Sin SD o SD no montable | Log `SD mount failed`, pantalla con barras de color, tarea suspendida tras no encontrar WAD |
-| SD montada sin `/sdcard/doom1.wad` | Log `WAD not found`, pantalla con barras de color, tarea suspendida |
-| SD montada con `/sdcard/doom1.wad` | Arranca DoomGeneric; limpia barras a negro y dibuja Doom landscape `502 x 376` rotado 90 grados |
+| WAD interno embebido y sin SD | Arranca Doom desde `/internal`; config/savegames no persisten porque `/sdcard/` no esta montado |
+| Sin WAD interno y sin SD o SD no montable | Log `SD mount failed`/`No WAD found`, pantalla con barras de color, tarea suspendida |
+| SD montada sin WAD | Log `No WAD found`, pantalla con barras de color, tarea suspendida |
+| SD montada con WAD | Arranca DoomGeneric; dibuja Doom landscape `502 x 376` rotado 90 grados; config/savegames usan `/sdcard/` |
 
 Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer esta rama, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
 
@@ -106,8 +109,8 @@ Datos ya documentados en este repo:
 | --- | --- |
 | `docs/HARDWARE.md` | Pines, display, SD, touch, IMU, audio, PMU y BSP |
 | `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
-| `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 16 MB, app 8 MB |
-| `partitions.csv` | `factory` 8 MB, `storage` SPIFFS 7 MB |
+| `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 16 MB, BSP SPIFFS label separado de `storage` |
+| `partitions.csv` | `factory` 3 MB, `storage` FAT 12 MB para WAD interno |
 | BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
 | BSP SD | `bsp_sdcard_mount()` y mount `/sdcard` |
 
@@ -235,7 +238,7 @@ Conclusiones practicas:
 | Base | Mantener `DoomGeneric` para la primera version funcional |
 | Alcance | No intentar compatibilidad GZDoom/Boom/MBF ni mods modernos en MVP |
 | Build | Evitar copiar proyectos que silencian warnings con `-w`; arreglar o aislar warnings reales |
-| Runtime | Priorizar display directo, WAD por SD, audio off e input minimo |
+| Runtime | Priorizar display directo, WAD por SD o FAT interno, SFX activo e input minimo |
 | Roadmap | Separar `compila`, `arranca`, `dibuja`, `se controla`, `se optimiza` |
 
 ## Base Recomendada
@@ -373,48 +376,39 @@ Gotcha: en DoomGeneric upstream, `doomgeneric_Create()` reserva `DG_ScreenBuffer
 
 ## Storage Y WAD
 
-Primera decision: cargar WAD desde microSD por BSP.
+El port actual soporta dos fuentes de WAD, siempre aportado por el usuario y nunca commiteado al repo:
 
-Motivos:
+| Fuente | Ruta | Uso |
+| --- | --- | --- |
+| FAT interno embebido | `wad/doom.wad` o `wad/doom1.wad` en el arbol de trabajo antes de compilar | CMake genera una imagen FAT para la particion `storage` y el firmware monta `/internal` read-only. |
+| microSD | `/sdcard/doom.wad` o `/sdcard/doom1.wad` | Permite cambiar WAD sin reflashear y da persistencia de config/savegames. |
 
-| Motivo | Detalle |
-| --- | --- |
-| No requiere tocar particiones | Evita redisenar flash antes de validar Doom |
-| Permite WADs grandes | Shareware, Freedoom o WAD legal del usuario |
-| Encaja con BSP | `bsp_sdcard_mount()` usa SDMMC 1-bit ya documentado |
-| Iteracion rapida | Cambiar WAD sin reflashear firmware |
-
-Ruta inicial propuesta:
+Orden de busqueda actual:
 
 ```text
+/internal/doom.wad
+/internal/doom1.wad
+/sdcard/doom.wad
 /sdcard/doom1.wad
 ```
 
-Alternativas posteriores:
+Config y savegames usan `/sdcard/`. Si se arranca con WAD interno sin SD, Doom puede ejecutarse pero no hay persistencia de `default.cfg`, `doom.cfg` ni partidas.
 
-| Alternativa | Uso |
-| --- | --- |
-| SPIFFS `/spiffs` | Solo WAD pequeno o assets auxiliares; particion actual 7 MB |
-| Particion raw `wad` | Mejor para mmap/flash, pero requiere redisenar `partitions.csv` |
-| Flash 32 MB | Solo tras validar `esptool.py flash_id` en hardware real |
-
-No commitear WADs al repo salvo que se haya revisado y documentado su licencia.
-
-Argumentos iniciales propuestos para el arranque standalone:
+Argumentos actuales de arranque standalone:
 
 ```text
-doom -iwad /sdcard/doom1.wad -mb 4 -nosound -nomusic -nogui
+doom -iwad <wad_encontrado> -mb 4 -nomusic -nogui
 ```
 
 Notas:
 
 | Parametro | Motivo |
 | --- | --- |
-| `-iwad /sdcard/doom1.wad` | WAD externo aportado por usuario |
-| `-mb 4` | Zone memory inicial contenida; ajustar tras medir |
-| `-nosound -nomusic` | Mantener audio fuera del MVP |
-| `-nogui` | Evitar rutas desktop de error popup |
-| Resolucion | Fijar por CMake/defines: `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` |
+| `-iwad <wad_encontrado>` | Ruta absoluta resuelta por `doom_app.c`. |
+| `-mb 4` | Zone memory inicial contenida; ajustar tras medir WADs concretos. |
+| `-nomusic` | MUS/MIDI queda fuera; SFX si esta activo. |
+| `-nogui` | Evitar rutas desktop de error popup. |
+| Resolucion | Fijar por CMake/defines: `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240`. |
 
 ## Input
 
@@ -427,7 +421,7 @@ Opciones iniciales:
 | Touch por zonas | Alta | Direccional virtual + fire/use/menu |
 | `BOOT` GPIO0 | Alta | Boton fisico unico; activo bajo; mantener recovery |
 | IMU QMI8658 | Media | Giro/strafe/aim experimental; usar `waveshare/qmi8658` |
-| PWR | Baja | No usar en MVP; ruta AXP2101/PWRON y riesgo de apagado |
+| PWR | Media | Pulsacion corta via AXP2101 como menu/escape; no usar long press cercano a 6 s. |
 | Mando externo | Media | Requiere pads/expansion y pinout validado |
 
 Mapping minimo de PoC:
@@ -439,32 +433,22 @@ Mapping minimo de PoC:
 | Fire | `BOOT` activo bajo |
 | Menu select/enter | `BOOT` activo bajo y zona central |
 | Use/open | Zona central del touch |
-| Menu/escape | Esquina superior izquierda del touch |
+| Menu/escape | Pulsacion corta de `PWR` |
 
 Si no se usa LVGL, el touch debe leerse mediante driver `esp_lcd_touch`/BSP touch sin depender del input device LVGL. Hay que definir si Doom toma ownership del touch durante su ejecucion.
 
-Para DoomGeneric, el input se emite como eventos de transicion (`keydown`/`keyup`), no como niveles repetidos indefinidamente. La HAL guarda el estado anterior de cada zona/boton y devuelve un evento por llamada a `DG_GetKey()`.
+Para DoomGeneric, el input se emite como eventos de transicion (`keydown`/`keyup`), no como niveles repetidos indefinidamente. La HAL guarda el estado anterior de cada zona/boton y devuelve eventos desde una cola. El polling de touch/I2C se hace solo cuando la cola esta vacia para evitar lecturas repetidas durante el vaciado de eventos.
 
 ## Audio
 
-No incluir audio en la primera PoC.
+El port actual mantiene SFX como feature real y deja musica deshabilitada.
 
-Motivos:
-
-| Motivo | Detalle |
+| Audio | Estado |
 | --- | --- |
-| Riesgo tecnico | Doom sound mixing + I2S + codec agrega otra dimension de bugs |
-| Performance | Audio compite por CPU y memoria |
-| BSP disponible | Se puede integrar despues por ES8311/I2S cuando video sea estable |
-| Referencias | `esp32-doom` stubea sonido y musica |
-
-Fase posterior:
-
-| Audio | Ruta posible |
-| --- | --- |
-| SFX mono | Mezclador software a 11025/22050 Hz hacia ES8311 |
-| Musica | Posponer; MIDI/MUS es mucho mas caro |
-| Volumen | BSP codec + preferencias NVS |
+| SFX | Mezclador software Doom a 22050 Hz, 16-bit, salida duplicada L/R hacia ES8311 via `esp_codec_dev`. |
+| Musica | Deshabilitada con `-nomusic`; MIDI/MUS queda fuera del alcance actual. |
+| Volumen | `esp_codec_dev_set_out_vol(spk, 60)` durante bring-up. |
+| Observabilidad | La tarea de audio loguea buffers/s, tiempo medio/maximo de escritura, errores de escritura y stack libre. |
 
 ## Tasking Y Timing
 
@@ -486,7 +470,7 @@ Timing:
 | --- | --- |
 | `DG_GetTicksMs()` | `esp_timer_get_time() / 1000` |
 | `DG_SleepMs()` | `vTaskDelay(pdMS_TO_TICKS(ms))` |
-| FPS log | Cada 5 s con heap interna/PSRAM |
+| FPS log | Cada 5 s con heap, PSRAM, stack, render e input/audio stats |
 
 ## Memoria Y Config
 
@@ -507,9 +491,11 @@ Mediciones obligatorias para cada hito:
 | Medicion | API/comando |
 | --- | --- |
 | FPS | contador en `DG_DrawFrame()` |
-| Heap interna libre/minima | `heap_caps_get_free_size(MALLOC_CAP_INTERNAL)` |
-| PSRAM libre/minima | `heap_caps_get_free_size(MALLOC_CAP_SPIRAM)` |
-| Stack libre | `uxTaskGetStackHighWaterMark()` |
+| Tiempo de render | media/max de `draw_doom_frame()` en microsegundos |
+| Heap interna libre/minima/largest block | `heap_caps_get_free_size`, `heap_caps_get_minimum_free_size`, `heap_caps_get_largest_free_block` |
+| PSRAM libre/minima/largest block | mismas APIs con `MALLOC_CAP_SPIRAM` |
+| Stack libre | `uxTaskGetStackHighWaterMark()` en tarea Doom y tarea audio |
+| Input/audio | drops de cola, errores touch/I2C AXP2101, eventos PWR, errores de escritura audio |
 | Tamano firmware | `idf.py size` despues de build |
 
 Riesgos de memoria/build especificos:
@@ -518,35 +504,25 @@ Riesgos de memoria/build especificos:
 | --- | --- |
 | `DG_ScreenBuffer` reservado con `malloc()` normal | Parche minimo para `heap_caps_malloc(..., MALLOC_CAP_SPIRAM)` o wrapper controlado |
 | Zone memory demasiado grande | Empezar con `-mb 4` y subir solo si WAD/engine lo requiere |
-| App supera slot `factory` 8 MB | Medir con `idf.py size`; cambiar particiones solo si falla o queda margen insuficiente |
+| App supera slot `factory` 3 MB | Medir con `idf.py size`; aumentar slot si audio/codigo crece demasiado |
 | Buffers DMA en PSRAM | Mantener chunks DMA en `MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL` |
 | Warnings masivos de third-party | Arreglar/aislar flags por componente; no usar `-w` global como solucion permanente |
 
 ## Particiones
 
-No cambiar `partitions.csv` en la primera PoC si el WAD viene de SD.
-
-Si se decide WAD en flash:
-
-| Paso | Motivo |
-| --- | --- |
-| Validar flash real con `esptool.py flash_id` | El baseline usa 16 MB, la placa parece 32 MB |
-| Decidir OTA/no OTA | Cambia todo el layout |
-| Crear particion `wad` raw o FAT/SPIFFS | El motor necesita acceso a WAD |
-| Ajustar app slot | DoomGeneric/PrBoom puede crecer bastante |
-| Documentar offsets/tamanos | Evitar layouts copiados sin razon |
-
-Layout posible sin OTA en 16 MB, solo si se abandona el SPIFFS actual:
+La rama `app/doom` usa un layout single-factory sin OTA y con FAT interno opcional para WAD embebido:
 
 ```csv
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x6000,
 phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, ,        8M,
-wad,      0x42, 0x06,    ,        7M,
+factory,  app,  factory, ,        3M,
+storage,  data, fat,     ,        12M,
 ```
 
-Esto es solo una idea de analisis, no una decision. Para WADs grandes, SD o flash 32 MB es mejor.
+`storage` no es SPIFFS en esta rama. `sdkconfig.defaults` deja el label BSP SPIFFS en `spiffs` para que una llamada accidental a `bsp_spiffs_mount()` no intente montar la particion FAT como SPIFFS.
+
+Si el binario Doom supera `3M`, aumentar `factory` antes de reducir `storage`. Si se requiere OTA, coredumps o mas de 12 MB de WAD interno, redisenar el layout completo y verificar antes la flash real con `esptool.py flash_id`.
 
 ## Licencias Y Assets
 
@@ -580,8 +556,8 @@ Objetivo: dejar cerrado el alcance antes de tocar codigo.
 | --- | --- |
 | Documentar firmware standalone | Decision cerrada |
 | Documentar aceptacion GPL en rama Doom | Decision cerrada |
-| Documentar WAD externo por SD | Decision cerrada |
-| Documentar no uso de `PWR` en MVP | Decision cerrada |
+| Documentar WAD externo por SD | Decision inicial cerrada; estado actual anade WAD interno opcional |
+| Documentar `PWR` | Decision actual: pulsacion corta como menu/escape via AXP2101 |
 | Documentar prioridad compile-first | Decision cerrada |
 
 Estado: completado en este documento antes del primer cambio de firmware.
@@ -641,7 +617,7 @@ Objetivo: cargar `/sdcard/doom1.wad`, entrar en el loop y avanzar frames.
 | Arrancar `doomgeneric_Create()` con argv fijo | WAD cargado |
 | Ejecutar `doomgeneric_Tick()` | Juego avanza |
 | Log FPS/heap/stack cada 5 s | Rendimiento medido |
-| Mantener audio off | Sin dependencia I2S/codec |
+| Mantener musica off | Sin dependencia MUS/MIDI; SFX por ES8311 activo |
 
 Criterio: Doom visible y avanzando, aunque input sea limitado.
 
@@ -657,7 +633,7 @@ Objetivo: poder navegar menu o jugar una escena simple con hardware disponible.
 | Debounce simple para `BOOT` | Pulsaciones estables |
 | UX documentada | Mapping reproducible |
 
-Criterio: entrada usable sin accesorio externo. No se usa `PWR`.
+Criterio: entrada usable sin accesorio externo. `PWR` corto abre menu/escape; no usar long press cercano a 6 s.
 
 ### Fase 6: Rendimiento
 
@@ -680,7 +656,7 @@ Objetivo: solo despues de video/input estable.
 
 | Idea | Notas |
 | --- | --- |
-| SFX mono | ES8311, 11025/22050 Hz |
+| Afinar SFX | ES8311, 22050 Hz, medir underruns/latencia |
 | Vibracion | GPIO18, validar hardware antes |
 | Launcher LVGL futuro | Separar claramente ownership display/touch |
 | Saves | Requiere filesystem y soporte motor |
@@ -692,11 +668,11 @@ Objetivo: solo despues de video/input estable.
 | --- | --- |
 | GPL en esta rama/producto? | Aceptado para la rama Doom |
 | Doom app o firmware dedicado? | Firmware standalone inicial |
-| WAD desde SD o flash interna? | SD para MVP; flash interna posterior si hace falta |
+| WAD desde SD o flash interna? | Ambas rutas activas: FAT interno opcional y SD |
 | Objetivo de FPS minimo aceptable? | Pendiente de medir en hardware |
 | Orientacion final portrait o landscape? | Landscape por software activo; validar FPS y orientacion en hardware |
-| Input principal? | Touch por zonas + `BOOT` para MVP |
-| Audio en MVP? | No |
+| Input principal? | Touch por zonas + `BOOT` + `PWR` corto para menu/escape |
+| Audio en MVP? | SFX activo; musica no |
 
 ## Decision Inicial De Implementacion
 
@@ -707,11 +683,11 @@ Implementar primero:
 | Modo | Firmware standalone |
 | Primer exito | `idf.py build` OK |
 | Motor | DoomGeneric |
-| Assets | WAD aportado por usuario en microSD |
+| Assets | WAD aportado por usuario en `wad/` o microSD |
 | Render | Directo SH8601/QSPI, sin LVGL |
 | Resolucion | Doom interno `320 x 200`, framebuffer `320 x 240`, salida landscape `502 x 376` |
-| Audio | Deshabilitado con `-nosound -nomusic` |
-| Input | Touch por zonas + `BOOT`; `PWR` excluido |
-| Medicion | FPS, heap interna, PSRAM, stack, tamano firmware |
+| Audio | SFX activo por ES8311; musica deshabilitada con `-nomusic` |
+| Input | Touch por zonas + `BOOT` + `PWR` corto via AXP2101 |
+| Medicion | FPS, render, heap interna, PSRAM, stack, input/audio stats, tamano firmware |
 
 El orden practico queda invertido respecto a una PoC puramente grafica: se permite importar el motor para cerrar compilacion primero. Si el primer runtime no muestra imagen, volver a un patron RGB565 directo por la misma ruta SH8601 antes de depurar el motor.
