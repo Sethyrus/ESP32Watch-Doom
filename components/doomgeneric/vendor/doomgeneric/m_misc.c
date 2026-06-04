@@ -179,9 +179,9 @@ char *M_TempFile(char *s)
         tempdir = ".";
     }
 #else
-    // In Unix, just use /tmp.
+    // In ESP32, use /sdcard.
 
-    tempdir = "/tmp";
+    tempdir = "/sdcard";
 #endif
 
     return M_StringJoin(tempdir, DIR_SEPARATOR_S, s, NULL);

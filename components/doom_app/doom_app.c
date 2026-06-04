@@ -2,6 +2,7 @@
 #include "doom_port.h"
 
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "bsp/esp32_s3_touch_amoled_2_06.h"
 #include "bsp/touch.h"
@@ -107,6 +108,14 @@ static void doom_task(void *arg)
     doom_app_init_input();
 
     doom_app_mount_sd();
+
+    if (s_sd_mounted) {
+        if (chdir(BSP_SD_MOUNT_POINT) != 0) {
+            ESP_LOGW(TAG, "Failed to chdir to %s", BSP_SD_MOUNT_POINT);
+        } else {
+            ESP_LOGI(TAG, "Working directory set to %s", BSP_SD_MOUNT_POINT);
+        }
+    }
 
     struct stat wad_stat;
     if (stat(DOOM_APP_WAD_PATH, &wad_stat) != 0) {

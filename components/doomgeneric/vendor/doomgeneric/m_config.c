@@ -2042,11 +2042,7 @@ float M_GetFloatVariable(char *name)
 
 static char *GetDefaultConfigDir(void)
 {
-    char *result = (char *)malloc(2);
-    result[0] = '.';
-    result[1] = '\0';
-
-    return result;
+    return strdup("/sdcard");
 }
 
 // 
@@ -2115,14 +2111,13 @@ char *M_GetSaveGameDir(char *iwadname)
 
         free(topdir);
 #else
-        savegamedir = M_StringJoin(configdir, DIR_SEPARATOR_S, ".savegame/", NULL);
-
-        M_MakeDirectory(savegamedir);
-
+        char *savedir = M_StringJoin(configdir, DIR_SEPARATOR_S, "savegame", NULL);
+        M_MakeDirectory(savedir);
+        savegamedir = M_StringJoin(savedir, DIR_SEPARATOR_S, NULL);
+        free(savedir);
         printf ("Using %s for savegames\n", savegamedir);
 #endif
     }
 
     return savegamedir;
 }
-

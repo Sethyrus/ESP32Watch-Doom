@@ -1583,8 +1583,10 @@ boolean M_Responder (event_t* ev)
 
 	  case KEY_ENTER:
 	    saveStringEnter = 0;
-	    if (savegamestrings[saveSlot][0])
-		M_DoSave(saveSlot);
+	    if (!savegamestrings[saveSlot][0]) {
+	        snprintf(savegamestrings[saveSlot], SAVESTRINGSIZE, "SLOT %d", saveSlot + 1);
+	    }
+	    M_DoSave(saveSlot);
 	    break;
 
 	  default:
