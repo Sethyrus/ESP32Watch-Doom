@@ -6,7 +6,7 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES
         doomgeneric
-        esp_driver_gpio
+        watch_board
         esp_timer
         esp_lcd
         espressif__esp_lcd_touch

@@ -6,7 +6,6 @@
 #include "doomkeys.h"
 #include "i_video.h"
 #include "doom_port.h"
-#include "driver/gpio.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
@@ -17,6 +16,7 @@
 #include "bsp/esp-bsp.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "watch_buttons.h"
 
 #define DOOM_PORT_FRAME_W DOOMGENERIC_RESX
 #define DOOM_PORT_FRAME_H DOOMGENERIC_RESY
@@ -29,7 +29,6 @@
 #define DOOM_PORT_GAME_H 376
 #define DOOM_PORT_GAME_X ((DOOM_PORT_LOGICAL_W - DOOM_PORT_GAME_W) / 2)
 #define DOOM_PORT_GAME_Y ((DOOM_PORT_LOGICAL_H - DOOM_PORT_GAME_H) / 2)
-#define DOOM_PORT_BOOT_GPIO GPIO_NUM_0
 #define DOOM_PORT_BOOT_DEBOUNCE_US 30000
 #define DOOM_PORT_EVENT_QUEUE_LEN 32
 #define DOOM_PORT_TOUCH_CENTER_W 160
@@ -41,15 +40,9 @@
 #define DOOM_PORT_TOUCH_MENU_CORNER_PX 90
 #define DOOM_PORT_STATS_LOG_US 5000000
 
-#define AXP2101_ADDR 0x34
-#define AXP2101_INTEN2 0x41
-#define AXP2101_INTSTS2 0x49
-#define AXP2101_PKEY_SHORT_IRQ_BIT (1 << 3)
-
 static const char *TAG = "doom_port";
 static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_touch_handle_t s_touch;
-static i2c_master_dev_handle_t s_axp2101_dev = NULL;
 static uint16_t *s_draw_buffers[2];
 static uint8_t s_next_draw_buffer;
 static uint16_t s_palette_swapped[256];
@@ -198,46 +191,19 @@ void doom_port_set_touch(esp_lcd_touch_handle_t touch)
 
 esp_err_t doom_port_init_input(void)
 {
-    const gpio_config_t boot_config = {
-        .pin_bit_mask = 1ULL << DOOM_PORT_BOOT_GPIO,
-        .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-
-    esp_err_t err = gpio_config(&boot_config);
+    esp_err_t err = watch_boot_button_init();
     if (err != ESP_OK) {
         return err;
     }
 
-    s_boot_raw = gpio_get_level(DOOM_PORT_BOOT_GPIO) == 0;
+    s_boot_raw = watch_boot_button_is_pressed();
     s_boot_stable = s_boot_raw;
     s_boot_last_change_us = esp_timer_get_time();
     s_input_ready = true;
 
-    // Enable AXP2101 short press interrupt (INTEN2 bit 3).
-    i2c_master_bus_handle_t i2c_bus = bsp_i2c_get_handle();
-    if (i2c_bus) {
-        i2c_device_config_t dev_cfg = {
-            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-            .device_address = AXP2101_ADDR,
-            .scl_speed_hz = 400000,
-        };
-        esp_err_t err_add = i2c_master_bus_add_device(i2c_bus, &dev_cfg, &s_axp2101_dev);
-        if (err_add == ESP_OK && s_axp2101_dev != NULL) {
-            uint8_t enable_data[2] = {AXP2101_INTEN2, 0x00};
-            // Read current INTEN2
-            esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &enable_data[0], 1, &enable_data[1], 1, -1);
-            if (err == ESP_OK) {
-                enable_data[1] |= AXP2101_PKEY_SHORT_IRQ_BIT;
-                err = i2c_master_transmit(s_axp2101_dev, enable_data, 2, -1);
-            }
-            if (err != ESP_OK) {
-                ESP_LOGW(TAG, "PWR short-press IRQ enable failed: %s", esp_err_to_name(err));
-                s_axp2101_dev = NULL;
-            }
-        }
+    err = watch_pwr_key_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "PWR key unavailable: %s", esp_err_to_name(err));
     }
 
     ESP_LOGI(TAG, "Input map: landscape touch center=use/enter, edges=move/turn; BOOT=fire/enter; PWR=menu");
@@ -287,7 +253,7 @@ static bool poll_boot_button(void)
         return false;
     }
 
-    bool raw_pressed = gpio_get_level(DOOM_PORT_BOOT_GPIO) == 0;
+    bool raw_pressed = watch_boot_button_is_pressed();
     int64_t now_us = esp_timer_get_time();
 
     if (raw_pressed != s_boot_raw) {
@@ -365,16 +331,12 @@ static void poll_input(void)
     desired[DOOM_INPUT_ENTER] = boot_pressed;
 
     // Check AXP2101 for PWR button short press
-    if (s_axp2101_dev) {
-        uint8_t reg = AXP2101_INTSTS2;
-        uint8_t status = 0;
-        esp_err_t err = i2c_master_transmit_receive(s_axp2101_dev, &reg, 1, &status, 1, 5);
-        if (err == ESP_OK && (status & AXP2101_PKEY_SHORT_IRQ_BIT)) {
+    if (watch_pwr_key_is_available()) {
+        bool pwr_pressed = false;
+        esp_err_t err = watch_pwr_key_take_short_press(&pwr_pressed);
+        if (pwr_pressed) {
             desired[DOOM_INPUT_ESCAPE] = true;
             s_pwr_short_events++;
-            // Clear interrupt
-            uint8_t clear_data[2] = {AXP2101_INTSTS2, AXP2101_PKEY_SHORT_IRQ_BIT};
-            err = i2c_master_transmit(s_axp2101_dev, clear_data, 2, 5);
             if (err != ESP_OK) {
                 s_axp_write_errors++;
             }
