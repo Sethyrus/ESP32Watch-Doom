@@ -29,3 +29,6 @@ wad/*
 !wad/README.md
 *.wad
 *.WAD
+
+# Local editor config (ESP-IDF extension writes absolute paths here)
+.vscode/
