@@ -4,7 +4,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
-static const char *TAG = "ESP32S3Watch";
+static const char *TAG = "ESP32WatchDoom";
 
 void app_main(void)
 {
