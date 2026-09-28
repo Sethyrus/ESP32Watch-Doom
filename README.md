@@ -1,54 +1,54 @@
-# ESP32S3Watch
+# ESP32Watch-Doom
 
-Firmware ESP-IDF para la placa Waveshare `ESP32-S3-Touch-AMOLED-2.06`.
+Port de **Doom** (sobre [doomgeneric](https://github.com/ozkl/doomgeneric)) para la Waveshare **ESP32-S3-Touch-AMOLED-2.06**: render directo al AMOLED en horizontal (502x376), efectos de sonido por el altavoz y controles por tactil y botones.
 
-La base del proyecto usa `ESP-IDF 5.5.4`, `LVGL` y el BSP oficial de Waveshare. No usa ESP-Brookesia por defecto: el objetivo es tener una base simple, estable y directa para validar pantalla, touch, brillo y perifericos antes de construir una capa de apps mas compleja.
+> **Antes de compilar: el WAD.** Este repo no incluye datos del juego. Necesitas un WAD legal (`doom1.wad` shareware o Freedoom) embebido al compilar o en la microSD. Instrucciones en [wad/README.md](wad/README.md).
 
-La rama `app/doom` reemplaza ese bootstrap por un firmware standalone de Doom; sus decisiones especificas estan documentadas en `docs/DOOM_PORT.md`.
+## Controles
 
-## Hardware Objetivo
+El reloj se sostiene en horizontal.
 
-- Placa: Waveshare `ESP32-S3-Touch-AMOLED-2.06`.
-- MCU: `ESP32-S3R8`, dual-core LX7 hasta 240 MHz.
-- PSRAM: 8 MB octal.
-- Flash: el esquematico monta `GD25Q256EYIGR` de 32 MB; el baseline usa config de 16 MB hasta validar la placa real.
-- Pantalla: AMOLED 2.06", 410 x 502, QSPI.
-- Touch: `FT3168` por I2C, driver BSP `esp_lcd_touch_ft5x06`.
-- IMU: `QMI8658` por I2C.
-- RTC: `PCF85063` por I2C.
-- PMU/bateria: `AXP2101` por I2C.
-- Audio: codec/speaker `ES8311`, doble microfono via ADC `ES7210`, I2S.
-- Storage: microSD por SDMMC 1-bit.
+| Accion | Control |
+| --- | --- |
+| Avanzar / retroceder | Tocar zona superior / inferior |
+| Girar | Tocar zona izquierda / derecha (franja media) |
+| Usar / abrir, aceptar en menu | Tocar el centro |
+| Disparar, aceptar en menu | `BOOT` |
+| Menu / pausa | Pulsacion corta de `PWR` |
 
-Ver detalles en `docs/HARDWARE.md`.
+No mantener `PWR` unos 6 s: apaga la placa.
 
-## Quick Start
+## Compilar y flashear
+
+Requiere `ESP-IDF 5.5.4` (ver [SETUP](https://github.com/Sethyrus/ESP32Watch-core/blob/main/docs/SETUP.md)).
 
 ```sh
-source "/Users/alex/.espressif/v5.5.4/esp-idf/export.sh"
+source "$HOME/.espressif/v5.5.4/esp-idf/export.sh"
 idf.py set-target esp32s3
 idf.py build
-idf.py -p /dev/tty.usbmodem21301 flash monitor
+idf.py -p /dev/tty.usbmodem1101 flash monitor
 ```
 
-Si el shell no encuentra `idf.py`, falta ejecutar el `source` anterior o el entorno de ESP-IDF no esta instalado completo.
+El puerto puede variar. Particiones: `factory` 3 MB + `storage` FAT 12 MB (WAD embebido). Sin WAD embebido, el firmware busca el WAD en la SD.
+
+## Estado
+
+Funciona: arranque, render, input tactil + BOOT + PWR, SFX, guardado en SD. Musica deshabilitada (`-nomusic`). Estado, medidas y decisiones en [docs/DOOM_PORT.md](docs/DOOM_PORT.md).
 
 ## Estructura
 
-- `main/main.c`: entrada `app_main()`; el bootstrap concreto puede variar por rama.
-- `main/idf_component.yml`: dependencias del componente principal.
-- `sdkconfig.defaults`: configuracion durable del proyecto.
-- `partitions.csv`: tabla de particiones durable.
-- `docs/HARDWARE.md`: sensores, pines, buses y APIs.
-- `docs/SETUP.md`: entorno ESP-IDF y flujo de build/flash.
-- `docs/GOTCHAS.md`: problemas conocidos y decisiones criticas.
-- `docs/ARCHITECTURE.md`: arquitectura base y criterio Brookesia vs LVGL+BSP.
-- `docs/DOOM_PORT.md`: investigacion, viabilidad y plan del port de Doom en la rama `app/doom`.
-- `docs/MAZE_DESIGN.md`: diseno del juego de laberinto en la rama `app/maze`.
-- `docs/BRINGUP.md`: checklist de validacion hardware antes de construir apps.
-- `docs/SOURCES.md`: fuentes oficiales, datasheets, componentes y ejemplos usados.
-- `AGENTS.md`: instrucciones resumidas para agentes.
+| Ruta | Contenido |
+| --- | --- |
+| `main/main.c` | Arranque. |
+| `components/doom_app/` | Capa ESP32: display, input, storage, audio (`doom_port.c`, `i_sound_esp32.c`). |
+| `components/doomgeneric/` | Motor doomgeneric vendorizado (solo lo que se compila; ver su README). |
+| `wad/` | Donde poner el WAD para embeberlo (no versionado). |
+| `docs/DOOM_PORT.md` | Investigacion, arquitectura, estado y referencias. |
 
-## Estado Actual
+Los botones vienen del componente `watch_board` de [ESP32Watch-core](https://github.com/Sethyrus/ESP32Watch-core), donde tambien esta la documentacion de hardware de la placa.
 
-La rama base arranca el BSP, inicializa LVGL, enciende la pantalla y muestra una pantalla de prueba. La rama `app/doom` arranca Doom standalone, busca un WAD legal aportado por el usuario y no usa LVGL en runtime; ver `docs/DOOM_PORT.md` para el estado detallado.
+## Licencia
+
+GPL-2.0 (ver [LICENSE](LICENSE)), porque incluye el codigo de Doom/doomgeneric. Los datos del juego (WAD) no forman parte del repo ni de las releases.
+
+Doom es una marca de id Software. Este proyecto no esta afiliado a id Software ni a ZeniMax/Bethesda.

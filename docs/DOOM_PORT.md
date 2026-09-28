@@ -1,6 +1,6 @@
 # Doom Port Research And Design
 
-Investigacion y plan de implementacion para la rama `app/doom`. Este documento captura las decisiones tomadas antes de empezar a portar codigo y debe mantenerse actualizado durante el desarrollo.
+Investigacion y plan de implementacion de ESP32Watch-Doom. Este documento captura las decisiones tomadas antes de empezar a portar codigo y debe mantenerse actualizado durante el desarrollo.
 
 ## Objetivo
 
@@ -16,7 +16,7 @@ Valorar y planificar un port jugable de Doom para la placa Waveshare `ESP32-S3-T
 | Storage actual | FAT interno opcional para WAD embebido + microSD por BSP SDMMC 1-bit |
 | Modo Doom inicial | Firmware standalone, no app dentro de shell LVGL |
 | UI general | LVGL sigue siendo baseline para apps normales, pero Doom no lo usa en runtime MVP |
-| Licencia motor | GPL aceptada para esta rama/firmware Doom |
+| Licencia motor | GPL-2.0 aceptada para este firmware (ver `LICENSE`) |
 
 El objetivo inicial no es un producto final. El primer hito es que el firmware standalone de Doom compile con `idf.py build`. Despues, la PoC medible debe cubrir arranque, WAD cargado, frames visibles, input minimo, FPS/heap registrados y sin panic.
 
@@ -27,7 +27,7 @@ El objetivo inicial no es un producto final. El primer hito es que el firmware s
 | Producto inicial | Firmware standalone de Doom | Maximiza rendimiento y reduce lifecycle/ownership con LVGL |
 | Prioridad inmediata | Llegar a `idf.py build` OK | Permite iterar sobre errores reales antes de optimizar |
 | Motor | `DoomGeneric` | Menor superficie de port: `DG_*`, timing, input, display y storage |
-| Licencia | Aceptar GPL para esta rama | Es la via practica para usar DoomGeneric/Doom source |
+| Licencia | Aceptar GPL para este firmware | Es la via practica para usar DoomGeneric/Doom source |
 | Assets | WAD aportado por usuario en `wad/` para FAT interno o en microSD | Evita commitear assets y permite arrancar sin SD si el WAD se embebe |
 | Render | Directo SH8601/QSPI con `bsp_display_new()` | Evita LVGL/task/locks durante el bucle Doom |
 | LVGL | No usar en runtime Doom MVP | Menos overhead y menos riesgo de threading |
@@ -53,7 +53,7 @@ Secuencia inicial de desarrollo, cuando se autorice empezar:
 | 8 | Anadir input minimo touch + `BOOT` | Eventos `keydown/keyup` limpios |
 | 9 | Medir FPS, heap y stack | Logs cada 5 s sin panic |
 
-El desarrollo inicial evitaba tocar `partitions.csv`. La rama actual ya usa una particion FAT `storage` para WAD interno, por lo que los cambios de particion deben mantenerse documentados.
+El desarrollo inicial evitaba tocar `partitions.csv`. El firmware actual ya usa una particion FAT `storage` para WAD interno, por lo que los cambios de particion deben mantenerse documentados.
 
 ## Estado De Implementacion
 
@@ -99,16 +99,17 @@ Comportamiento runtime esperado despues del bring-up:
 | SD montada sin WAD | Log `No WAD found`, pantalla con barras de color, tarea suspendida |
 | SD montada con WAD | Arranca DoomGeneric; dibuja Doom landscape `502 x 376` rotado 90 grados; config/savegames usan `/sdcard/` |
 
-Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer esta rama, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
+Advertencia: el build todavia muestra warnings del codigo third-party DoomGeneric. No bloquean el firmware porque estan limitados al componente vendor. Antes de endurecer el firmware, decidir si conviene parchearlos uno a uno o mantenerlos documentados.
 
 ## Estado Local Relevante
 
-Datos ya documentados en este repo:
+Datos ya documentados:
 
 | Recurso | Dato relevante |
 | --- | --- |
-| `docs/HARDWARE.md` | Pines, display, SD, touch, IMU, audio, PMU y BSP |
-| `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
+| ESP32Watch-core `docs/HARDWARE.md` | Pines, display, SD, touch, IMU, audio, PMU y BSP |
+| ESP32Watch-core `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
+| ESP32Watch-core `watch_board` | `BOOT` GPIO0 raw y pulsacion corta de `PWR` via AXP2101 (`watch_buttons.h`) |
 | `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 16 MB, BSP SPIFFS label separado de `storage` |
 | `partitions.csv` | `factory` 3 MB, `storage` FAT 12 MB para WAD interno |
 | BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
@@ -225,7 +226,7 @@ Fuentes revisadas despues de la investigacion inicial:
 | --- | --- |
 | ActuallyTaylor, `Porting Doom (Part 1)` | `DG_DrawFrame()` concentra la mayor parte del trabajo real: adaptar el framebuffer al display y generar eventos de input |
 | Reddit guide de source ports | `GZDoom` es para PC/modding avanzado; para microcontrolador interesan bases mas pequenas tipo DoomGeneric/Chocolate/PrBoom |
-| Mattias Gustavsson `doom-crt` | Buena filosofia para esta rama: cambios minimos, pocas dependencias, build simple y fuente facil de auditar |
+| Mattias Gustavsson `doom-crt` | Buena filosofia para este port: cambios minimos, pocas dependencias, build simple y fuente facil de auditar |
 | Doomworld `where to start...` | No empezar un source port desde cero; usar una base existente, compilar primero, entender subsistemas y modificar poco a poco |
 | DoomWiki `Doom source code` | Subsistemas por prefijo: `I_*` plataforma, `W_*` WAD, `R_*` render, `P_*` juego, `Z_*` memoria |
 | DoomWiki `Static limits` | Vanilla usa limites estaticos y zone memory; para MVP conviene evitar WADs/mods complejos |
@@ -254,7 +255,7 @@ No usar LVGL para el render de Doom en la primera PoC. Motivos:
 | Control | Render directo permite medir DMA, conversion y escalado sin widgets |
 | Riesgo | Menos dependencias activas durante la PoC |
 
-LVGL puede seguir siendo el shell de otras apps o un launcher futuro, pero la primera rama Doom debe tomar ownership claro de display/touch/SD desde `app_main()` y no arrancar el port LVGL.
+LVGL puede seguir siendo el shell de otras apps o un launcher futuro, pero el firmware Doom debe tomar ownership claro de display/touch/SD desde `app_main()` y no arrancar el port LVGL.
 
 ## Arquitectura Objetivo Inicial
 
@@ -510,7 +511,7 @@ Riesgos de memoria/build especificos:
 
 ## Particiones
 
-La rama `app/doom` usa un layout single-factory sin OTA y con FAT interno opcional para WAD embebido:
+El firmware usa un layout single-factory sin OTA y con FAT interno opcional para WAD embebido:
 
 ```csv
 # Name,   Type, SubType, Offset,  Size, Flags
@@ -520,7 +521,7 @@ factory,  app,  factory, ,        3M,
 storage,  data, fat,     ,        12M,
 ```
 
-`storage` no es SPIFFS en esta rama. `sdkconfig.defaults` deja el label BSP SPIFFS en `spiffs` para que una llamada accidental a `bsp_spiffs_mount()` no intente montar la particion FAT como SPIFFS.
+`storage` no es SPIFFS en este firmware. `sdkconfig.defaults` deja el label BSP SPIFFS en `spiffs` para que una llamada accidental a `bsp_spiffs_mount()` no intente montar la particion FAT como SPIFFS.
 
 Si el binario Doom supera `3M`, aumentar `factory` antes de reducir `storage`. Si se requiere OTA, coredumps o mas de 12 MB de WAD interno, redisenar el layout completo y verificar antes la flash real con `esptool.py flash_id`.
 
@@ -555,7 +556,7 @@ Objetivo: dejar cerrado el alcance antes de tocar codigo.
 | Paso | Resultado |
 | --- | --- |
 | Documentar firmware standalone | Decision cerrada |
-| Documentar aceptacion GPL en rama Doom | Decision cerrada |
+| Documentar aceptacion GPL del firmware Doom | Decision cerrada |
 | Documentar WAD externo por SD | Decision inicial cerrada; estado actual anade WAD interno opcional |
 | Documentar `PWR` | Decision actual: pulsacion corta como menu/escape via AXP2101 |
 | Documentar prioridad compile-first | Decision cerrada |
@@ -666,7 +667,7 @@ Objetivo: solo despues de video/input estable.
 
 | Pregunta | Estado actual |
 | --- | --- |
-| GPL en esta rama/producto? | Aceptado para la rama Doom |
+| GPL en este producto? | Aceptado: repo con licencia GPL-2.0 |
 | Doom app o firmware dedicado? | Firmware standalone inicial |
 | WAD desde SD o flash interna? | Ambas rutas activas: FAT interno opcional y SD |
 | Objetivo de FPS minimo aceptable? | Pendiente de medir en hardware |
@@ -691,3 +692,29 @@ Implementar primero:
 | Medicion | FPS, render, heap interna, PSRAM, stack, input/audio stats, tamano firmware |
 
 El orden practico queda invertido respecto a una PoC puramente grafica: se permite importar el motor para cerrar compilacion primero. Si el primer runtime no muestra imagen, volver a un patron RGB565 directo por la misma ruta SH8601 antes de depurar el motor.
+
+## Referencias Doom
+
+| Recurso | URL | Uso |
+| --- | --- | --- |
+| Espressif `esp32-doom` | https://github.com/espressif/esp32-doom | PoC PrBoom para ESP32 original; referencia de PSRAM, WAD en particion raw, framebuffer 320x240, DMA y stubs de audio. No copiar literalmente. |
+| `doom1-cut.wad` de Espressif | https://dl.espressif.com/dl/doom1-cut.wad | WAD recortado usado por `esp32-doom`; referencia historica. No commitear ni usar sin revisar licencia/alcance. |
+| DoomGeneric | https://github.com/ozkl/doomgeneric | Base importada en `components/doomgeneric/vendor` desde commit `dcb7a8dbc7a16ce3dda29382ac9aae9d77d21284`. API minima `DG_*`. Licencia GPL-2.0. |
+| ESP32-S3 DoomGeneric port | https://github.com/Komedenden/esp32-s3-doom-port | Referencia reciente ESP-IDF para ESP32-S3 N16R8, framebuffer en PSRAM, SD, chunks DMA y 15 FPS reportados. Display/input no coinciden con esta placa. |
+| Doom source release | https://github.com/id-Software/DOOM | Fuente historica GPL-2.0 del motor Doom. |
+| Freedoom | https://freedoom.github.io/ | Assets libres compatibles con motores Doom; alternativa a WAD comercial/shareware para pruebas si tamano y compatibilidad encajan. |
+| Freedoom repo | https://github.com/freedoom/freedoom | Fuentes/licencia de assets Freedoom; licencia BSD-like segun `COPYING.adoc`. |
+| Porting Doom, Part 1 | https://actuallytaylor.com/blog/portingdoomp1 | Explicacion practica de DoomGeneric; confirma que `DG_DrawFrame()` e input son la mayor parte del trabajo de port. |
+| Guide to source ports in classic Doom | https://old.reddit.com/r/Doom/comments/r3ziow/guide_to_source_ports_in_classic_doom/ | Comparativa informal de source ports; util para descartar GZDoom/Boom avanzado en microcontrolador MVP. |
+| My easy to build Doom port | https://mattiasgustavsson.com/my-easy-to-build-doom-port/ | Referencia de filosofia minimalista: pocos cambios, build simple y fuente facil de auditar. |
+| Doomworld basic source port thread | https://www.doomworld.com/forum/topic/92065-where-to-start-on-making-a-basic-simple-doom-source-port/ | Consejos de comunidad: no empezar de cero; compilar una base existente y modificar incrementalmente. |
+| DoomWiki DoomGeneric | https://doomwiki.org/wiki/DoomGeneric | Contexto del port DoomGeneric y su objetivo de simplificar integraciones. |
+| DoomWiki source port | https://doomwiki.org/wiki/Source_port | Taxonomia de ports y alcance de compatibilidad. |
+| DoomWiki Doom source code | https://doomwiki.org/wiki/Doom_source_code | Estructura historica del codigo y subsistemas `I_*`, `W_*`, `R_*`, `P_*`, `Z_*`. |
+| DoomWiki WAD | https://doomwiki.org/wiki/WAD | Formato de assets WAD y contexto de IWAD/PWAD. |
+| DoomWiki static limits | https://doomwiki.org/wiki/Static_limits | Limites vanilla relevantes para evitar WADs/mods complejos en MVP. |
+| DoomWiki Chocolate Doom | https://doomwiki.org/wiki/Chocolate_Doom | Referencia de port conservador/vanilla; util como filosofia, no como base inicial. |
+| DoomWiki PrBoom+ | https://doomwiki.org/wiki/PrBoom%2B | Contexto de PrBoom/PrBoom+ frente a `esp32-doom`; mayor superficie que DoomGeneric. |
+| DoomWiki Crispy Doom | https://doomwiki.org/wiki/Crispy_Doom | Port conservador extendido; referencia, no objetivo de MVP. |
+| DoomWiki GZDoom | https://doomwiki.org/wiki/GZDoom | Port moderno orientado a PC/modding; fuera de alcance para ESP32-S3 MVP. |
+| Retro-Go | https://github.com/ducalex/retro-go | Referencia de firmware de emulacion/juegos en ESP32; demasiado amplio para el primer port standalone. |
