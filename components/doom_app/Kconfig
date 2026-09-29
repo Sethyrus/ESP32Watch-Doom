@@ -1,0 +1,13 @@
+menu "Doom"
+
+    config DOOM_EMBED_WAD
+        bool "Embed the WAD from wad/ into the internal storage partition"
+        default y
+        help
+            When wad/doom.wad or wad/doom1.wad exists at configure time, build a FAT
+            image of the `storage` partition with it (flashed by idf.py flash and by
+            ESP32Watch-Launcher's flash_all.sh) and read it from /internal.
+            Disable to always load the WAD from the microSD, even if wad/ has one.
+            Run `idf.py reconfigure` after adding or removing a WAD in wad/.
+
+endmenu

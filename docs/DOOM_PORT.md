@@ -115,7 +115,7 @@ Datos ya documentados:
 | ESP32Watch-core `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
 | ESP32Watch-core `watch_board` | `BOOT` GPIO0 raw y pulsacion corta de `PWR` via AXP2101 (`watch_buttons.h`) |
 | `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 16 MB, BSP SPIFFS label separado de `storage` |
-| `partitions.csv` | `factory` 3 MB, `storage` FAT 12 MB para WAD interno |
+| `partitions.csv` | Tabla comun del launcher: `factory` 1,5 MB, Doom en `ota_1` (2 MB), `storage` FAT ~8,4 MB para WAD interno |
 | BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
 | BSP SD | `bsp_sdcard_mount()` y mount `/sdcard` |
 
@@ -383,7 +383,7 @@ El port actual soporta dos fuentes de WAD, siempre aportado por el usuario y nun
 
 | Fuente | Ruta | Uso |
 | --- | --- | --- |
-| FAT interno embebido | `wad/doom.wad` o `wad/doom1.wad` en el arbol de trabajo antes de compilar | CMake genera una imagen FAT para la particion `storage` y el firmware monta `/internal` read-only. |
+| FAT interno embebido | `wad/doom.wad` o `wad/doom1.wad` en el arbol de trabajo antes de compilar, con `CONFIG_DOOM_EMBED_WAD=y` (defecto; menuconfig > Doom) | CMake genera una imagen FAT para la particion `storage` (`build/storage.bin`) y el firmware monta `/internal` read-only. Con `n` no se embebe aunque haya WAD en `wad/`, y se borra un `storage.bin` antiguo. |
 | microSD | `/sdcard/doom.wad` o `/sdcard/doom1.wad` | Permite cambiar WAD sin reflashear y da persistencia de config/savegames. |
 
 Orden de busqueda actual:
@@ -507,25 +507,31 @@ Riesgos de memoria/build especificos:
 | --- | --- |
 | `DG_ScreenBuffer` reservado con `malloc()` normal | Parche minimo para `heap_caps_malloc(..., MALLOC_CAP_SPIRAM)` o wrapper controlado |
 | Zone memory demasiado grande | `-mb 6` en PSRAM; subir solo si WAD/engine lo requiere |
-| App supera slot `factory` 3 MB | Medir con `idf.py size`; aumentar slot si audio/codigo crece demasiado |
+| App supera su slot de 2 MB (`ota_1`; `factory` 1,5 MB en standalone) | Medir con `idf.py size`; redimensionar en la tabla comun de ESP32Watch-Launcher |
 | Buffers DMA en PSRAM | Mantener chunks DMA en `MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL` |
 | Warnings masivos de third-party | Arreglar/aislar flags por componente; no usar `-w` global como solucion permanente |
 
 ## Particiones
 
-El firmware usa un layout single-factory sin OTA y con FAT interno opcional para WAD embebido:
+El firmware usa la tabla comun de [ESP32Watch-Launcher](https://github.com/Sethyrus/ESP32Watch-Launcher) (copiada en `partitions.csv`), para poder grabarse junto a las demas apps:
 
 ```csv
-# Name,   Type, SubType, Offset,  Size, Flags
-nvs,      data, nvs,     0x9000,  0x6000,
-phy_init, data, phy,     0xf000,  0x1000,
-factory,  app,  factory, ,        3M,
-storage,  data, fat,     ,        12M,
+# Name,   Type, SubType,  Offset,   Size
+nvs,      data, nvs,      0x9000,   0x6000,
+otadata,  data, ota,      0xf000,   0x2000,
+phy_init, data, phy,      0x11000,  0x1000,
+factory,  app,  factory,  0x20000,  0x180000,
+ota_0,    app,  ota_0,    0x1a0000, 0x200000,
+ota_1,    app,  ota_1,    0x3a0000, 0x200000,
+ota_2,    app,  ota_2,    0x5a0000, 0x200000,
+storage,  data, fat,      0x7a0000, 0x860000,
 ```
+
+Con el launcher, Doom va en `ota_1` y `app_main` llama a `watch_launcher_boot_once()`, asi que `I_Quit` (`esp_restart()`) vuelve al launcher. En standalone (`idf.py flash`) Doom ocupa `factory`. `flash_all.sh` del launcher graba `build/storage.bin` solo si este build lo genero (ver `CONFIG_DOOM_EMBED_WAD` en "Storage Y WAD").
 
 `storage` no es SPIFFS en este firmware. `sdkconfig.defaults` deja el label BSP SPIFFS en `spiffs` para que una llamada accidental a `bsp_spiffs_mount()` no intente montar la particion FAT como SPIFFS.
 
-Si el binario Doom supera `3M`, aumentar `factory` antes de reducir `storage`. Si se requiere OTA, coredumps o mas de 12 MB de WAD interno, redisenar el layout completo y verificar antes la flash real con `esptool.py flash_id`.
+El binario mide ~0,7 MB. Si supera el slot, o se necesitan coredumps o mas de ~8,4 MB de WAD interno, redisenar la tabla comun en el launcher (el chip es de 32 MB, aunque todo se configura a 16 MB).
 
 ## Licencias Y Assets
 

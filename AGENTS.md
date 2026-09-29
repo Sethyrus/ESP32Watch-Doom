@@ -16,7 +16,8 @@
 - No test, lint or format targets are configured; do not invent them.
 
 ## Critical Hardware Notes
-- `partitions.csv`: `factory` 3 MB + `storage` FATFS 12 MB for the embedded WAD. BSP SPIFFS label is moved to `spiffs` so `bsp_spiffs_mount()` never touches `storage`.
+- `partitions.csv`: copy of the shared ESP32Watch-Launcher table (`factory` 1.5 MB, app slots `ota_0..2` of 2 MB, Doom in `ota_1`, `storage` FATFS ~8.4 MB at `0x7a0000` for the embedded WAD); do not change it here alone. `app_main` calls `watch_launcher_boot_once()` first, so `I_Quit` (`esp_restart()`) returns to the launcher. BSP SPIFFS label is moved to `spiffs` so `bsp_spiffs_mount()` never touches `storage`.
+- WAD embedding is decided here: a WAD in `wad/` plus `CONFIG_DOOM_EMBED_WAD` (component Kconfig, default y) builds `build/storage.bin`; otherwise CMake removes any stale `storage.bin` and the firmware reads the SD. ESP32Watch-Launcher flashes `storage.bin` only when it exists.
 - Reuse `bsp_i2c_get_handle()` for devices on the shared I2C bus; never create a second master bus on the same port.
 - BOOT is GPIO0, active low. PWR is AXP2101 `PWRON` (short press via INTSTS2 IRQ); holding it ~6 s powers off the board.
 - Button convention: BOOT = accept/primary action, PWR short press = back/menu. See "Convencion De Botones" in core `docs/ARCHITECTURE.md`.
