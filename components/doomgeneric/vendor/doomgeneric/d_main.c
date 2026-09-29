@@ -125,7 +125,12 @@ boolean         main_loop_started = false;
 char		wadfile[1024];		// primary wad file
 char		mapdir[1024];           // directory of development maps
 
+#ifdef ESP_PLATFORM
+// ENDOOM ends in exit(0), which aborts on ESP-IDF; I_Quit restarts instead.
+int             show_endoom = 0;
+#else
 int             show_endoom = 1;
+#endif
 
 
 void D_ConnectNetGame(void);

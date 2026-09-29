@@ -130,7 +130,8 @@ static int GetAdjustedTime(void)
         time_ms += (offsetms / FRACUNIT);
     }
 
-    return (time_ms * TICRATE) / 1000;
+    // 64-bit product: time_ms * TICRATE overflows int32 after ~17 h of uptime.
+    return (int) (((int64_t) time_ms * TICRATE) / 1000);
 }
 
 static boolean BuildNewTic(void)

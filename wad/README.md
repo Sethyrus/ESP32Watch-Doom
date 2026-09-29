@@ -19,16 +19,19 @@ El firmware incluye el motor, **no los datos del juego**. Hace falta un WAD que 
 
    ```sh
    idf.py build
-   idf.py -p /dev/tty.usbmodem1101 flash
+   idf.py -p <PORT> flash
    ```
 
    Al compilar aparece `DOOM WAD Detected: ... Embedding into FATFS partition 'storage'`. CMake genera la imagen FAT de la particion `storage` (12 MB) y `idf.py flash` la graba. El firmware la monta read-only en `/internal`.
 
-Sin SD, las partidas guardadas y la configuracion **no persisten**.
+   - El WAD se detecta al configurar CMake: si lo anades despues del primer build, ejecutar `idf.py reconfigure` antes de compilar.
+   - `idf.py flash` vuelve a grabar la imagen de 12 MB cada vez. Si solo cambia el codigo, `idf.py -p <PORT> app-flash` es mucho mas rapido.
+
+Sin SD no se pueden guardar partidas (el juego muestra `SAVE FAILED: NO SD` y sigue).
 
 ## Opcion 2: en la microSD
 
-Copiar el WAD en la raiz de la tarjeta (FAT32) como `doom.wad` o `doom1.wad`. No hace falta recompilar. Con SD montada, `default.cfg`, `doom.cfg` y las partidas se guardan en `/sdcard/`.
+Copiar el WAD en la raiz de la tarjeta (FAT32) como `doom.wad` o `doom1.wad`. No hace falta recompilar. Con SD montada, las partidas se guardan en `/sdcard/savegame/`. La configuracion (volumen, tamano de pantalla...) no persiste entre arranques.
 
 Se pueden combinar: WAD embebido para jugar y SD para guardar.
 

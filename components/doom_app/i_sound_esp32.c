@@ -51,13 +51,15 @@ static SemaphoreHandle_t s_audio_mutex;
 static bool s_sound_initialized = false;
 static bool s_use_sfx_prefix = false;
 static int s_sfx_load_logs;
+// Per-sample mix accumulator, clipped once after all channels are summed.
+static int32_t s_mix_accum[BUFFER_SAMPLES];
 
 // Dummy sound devices
 static snddevice_t sound_devices[] = { SNDDEVICE_SB };
 
-// Convert doom volume (0-255) to a multiplier (0-256)
+// Doom passes sfx volume 0-127; the mixer scales by mult/256, so 127 maps to ~full scale.
 static inline int vol_to_mult(int vol) {
-    return vol;
+    return vol * 2;
 }
 
 static uint16_t read_le16(const uint8_t *data)
@@ -134,7 +136,7 @@ static void audio_task(void *arg)
             continue;
         }
 
-        memset(mix_buffer, 0, sizeof(mix_buffer));
+        memset(s_mix_accum, 0, sizeof(s_mix_accum));
 
         if (xSemaphoreTake(s_audio_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             for (int i = 0; i < NUM_CHANNELS; i++) {
@@ -152,20 +154,24 @@ static void audio_task(void *arg)
                     int16_t sample = (int16_t)((ch->data[pos] - 128) << 8);
 
                     // Apply volume
-                    int32_t mixed = mix_buffer[s * 2] + ((sample * ch->vol) / 256);
-
-                    // Clip
-                    if (mixed > 32767) mixed = 32767;
-                    else if (mixed < -32768) mixed = -32768;
-
-                    // Write to both Left and Right channels (Stereo)
-                    mix_buffer[s * 2] = (int16_t)mixed;
-                    mix_buffer[s * 2 + 1] = (int16_t)mixed;
+                    s_mix_accum[s] += (sample * ch->vol) / 256;
 
                     ch->pos_fp += ch->step_fp;
                 }
             }
             xSemaphoreGive(s_audio_mutex);
+        }
+
+        for (int s = 0; s < BUFFER_SAMPLES; s++) {
+            int32_t mixed = s_mix_accum[s];
+
+            // Clip
+            if (mixed > 32767) mixed = 32767;
+            else if (mixed < -32768) mixed = -32768;
+
+            // Write to both Left and Right channels (Stereo)
+            mix_buffer[s * 2] = (int16_t)mixed;
+            mix_buffer[s * 2 + 1] = (int16_t)mixed;
         }
 
         if (s_codec) {
@@ -213,6 +219,11 @@ static boolean I_ESP32_Init(boolean use_sfx_prefix)
     ESP_LOGI(TAG, "I_ESP32_Init called");
     s_use_sfx_prefix = use_sfx_prefix;
 
+    if (s_codec == NULL) {
+        ESP_LOGW(TAG, "No audio codec; running without sound");
+        return false;
+    }
+
     memset(channels, 0, sizeof(channels));
     s_audio_mutex = xSemaphoreCreateMutex();
     if (s_audio_mutex == NULL) {
@@ -257,7 +268,8 @@ static int I_ESP32_GetSfxLumpNum(sfxinfo_t *sfx)
     } else {
         snprintf(namebuf, sizeof(namebuf), "%s", sfx->name);
     }
-    return W_GetNumForName(namebuf);
+    // W_CheckNumForName returns -1 for a missing lump (parse_dmx_sfx skips it); W_GetNumForName would I_Error.
+    return W_CheckNumForName(namebuf);
 }
 
 static void I_ESP32_Update(void)
@@ -267,7 +279,7 @@ static void I_ESP32_Update(void)
 
 static void I_ESP32_UpdateSoundParams(int channel, int vol, int sep)
 {
-    if (channel < 0 || channel >= NUM_CHANNELS) return;
+    if (channel < 0 || channel >= NUM_CHANNELS || s_audio_mutex == NULL) return;
 
     if (xSemaphoreTake(s_audio_mutex, portMAX_DELAY) == pdTRUE) {
         channels[channel].vol = vol_to_mult(vol);
@@ -321,7 +333,7 @@ static int I_ESP32_StartSound(sfxinfo_t *sfxinfo, int channel, int vol, int sep)
 
 static void I_ESP32_StopSound(int channel)
 {
-    if (channel < 0 || channel >= NUM_CHANNELS) return;
+    if (channel < 0 || channel >= NUM_CHANNELS || s_audio_mutex == NULL) return;
 
     if (xSemaphoreTake(s_audio_mutex, portMAX_DELAY) == pdTRUE) {
         channels[channel].active = false;
@@ -331,7 +343,7 @@ static void I_ESP32_StopSound(int channel)
 
 static boolean I_ESP32_SoundIsPlaying(int channel)
 {
-    if (channel < 0 || channel >= NUM_CHANNELS) return false;
+    if (channel < 0 || channel >= NUM_CHANNELS || s_audio_mutex == NULL) return false;
 
     bool playing = false;
     if (xSemaphoreTake(s_audio_mutex, portMAX_DELAY) == pdTRUE) {

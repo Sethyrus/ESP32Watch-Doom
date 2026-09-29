@@ -12,7 +12,7 @@
 ## Commands
 - Source ESP-IDF: `source "$HOME/.espressif/v5.5.4/esp-idf/export.sh"`.
 - First setup: `idf.py set-target esp32s3`. Verification: `idf.py build` (works with or without a WAD in `wad/`).
-- Flash and monitor: `idf.py -p /dev/tty.usbmodem1101 flash monitor`.
+- Flash and monitor: `idf.py -p <PORT> flash monitor` (macOS port looks like `/dev/tty.usbmodem*` and changes with the USB socket; `idf.py` auto-detects it if `-p` is omitted).
 - No test, lint or format targets are configured; do not invent them.
 
 ## Critical Hardware Notes

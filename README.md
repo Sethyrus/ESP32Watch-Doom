@@ -13,10 +13,10 @@ El reloj se sostiene en horizontal.
 | Avanzar / retroceder | Tocar zona superior / inferior |
 | Girar | Tocar zona izquierda / derecha (franja media) |
 | Usar / abrir, aceptar en menu | Tocar el centro |
-| Disparar, aceptar en menu | `BOOT` |
-| Menu / pausa | Pulsacion corta de `PWR` |
+| Disparar, aceptar en menu, confirmar Si/No | `BOOT` |
+| Menu / pausa, responder No | Pulsacion corta de `PWR` |
 
-No mantener `PWR` unos 6 s: apaga la placa.
+No mantener `PWR` unos 6 s: apaga la placa. `Quit Game` → Si reinicia el reloj.
 
 ## Compilar y flashear
 
@@ -26,7 +26,7 @@ Requiere `ESP-IDF 5.5.4` (ver [SETUP](https://github.com/Sethyrus/ESP32Watch-cor
 source "$HOME/.espressif/v5.5.4/esp-idf/export.sh"
 idf.py set-target esp32s3
 idf.py build
-idf.py -p /dev/tty.usbmodem1101 flash monitor
+idf.py -p <PORT> flash monitor   # p. ej. /dev/tty.usbmodem1101; sin -p lo autodetecta
 ```
 
 El puerto puede variar. Particiones: `factory` 3 MB + `storage` FAT 12 MB (WAD embebido). Sin WAD embebido, el firmware busca el WAD en la SD.

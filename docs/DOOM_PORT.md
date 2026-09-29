@@ -83,8 +83,12 @@ Parches locales aplicados al vendor:
 | --- | --- | --- |
 | `doomgeneric.c` | `DG_ScreenBuffer` usa `sizeof(pixel_t)` y `heap_caps_malloc(... SPIRAM ...)` con fallback | Evitar consumir SRAM interna y no sobrerreservar en `CMAP256` |
 | `i_video.c` | `CMAP256` estira `320 x 200` a framebuffer `320 x 240` y evita limpiar el framebuffer si se sobrescribe completo | Evitar la ruta `rgb565` upstream, corregir aspecto y reducir trabajo redundante |
-| `m_config.c` | Directorio por defecto de config/savegames en `/sdcard/` | Persistencia en SD y ruta correcta para `default.cfg`/`doom.cfg` |
-| `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM` | `-mb 4` debe ir a PSRAM y no debe llamar `zenity/system()` |
+| `m_config.c` | Directorio por defecto de savegames en `/sdcard/` | Persistencia de partidas en SD. La carga/guardado de `default.cfg`/`doom.cfg` sigue bajo `ORIGCODE` (desactivado): la configuracion no persiste |
+| `i_system.c` | Zone memory usa PSRAM con fallback; error GUI desktop desactivado en `ESP_PLATFORM`; `I_Quit` hace `esp_restart()` | `-mb 6` debe ir a PSRAM, no llamar `zenity/system()`, y `exit()` hace `abort()` en ESP-IDF |
+| `d_main.c` | `show_endoom = 0` en `ESP_PLATFORM` | ENDOOM termina en `exit(0)` (panic en ESP-IDF) |
+| `m_controls.c` | `key_menu_confirm = KEY_ENTER`, `key_message_refresh = 0` en `ESP_PLATFORM` | Sin teclado no llega `'y'`: los prompts Si/No se confirman con `BOOT`/centro. `ENTER` ya no reabre el ultimo mensaje del HUD al disparar |
+| `g_game.c` | Guardar sin SD muestra `SAVE FAILED: NO SD` y sigue; `vanilla_savegame_limit = 0` | Evitar `I_Error` (tarea suspendida) sin SD o en niveles grandes |
+| `d_loop.c`, `i_timer.c` | Conversion ms a tics en 64 bits | `time_ms * TICRATE` desbordaba int32 tras ~17 h encendido |
 | `r_plane.c` | `visplanes` usa `EXT_RAM_BSS_ATTR` | Resolver overflow DRAM manteniendo limite `MAXVISPLANES=128` |
 | `vendor/.gitignore` | Ya no ignora la carpeta fuente `doomgeneric/` | Evitar que el vendor quede incompleto |
 | `CMakeLists.txt` vendor | Fuentes listadas explicitamente, `CMAP256`, `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240` | Build reproducible y framebuffer indexado 320 x 240 |
@@ -114,8 +118,6 @@ Datos ya documentados:
 | `partitions.csv` | `factory` 3 MB, `storage` FAT 12 MB para WAD interno |
 | BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
 | BSP SD | `bsp_sdcard_mount()` y mount `/sdcard` |
-
-Punto pendiente detectado: `sdkconfig.defaults` fija `CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT=100`, pero el `sdkconfig` generado local visto durante la investigacion estaba en `40`. Para Doom se recomienda no depender de LVGL, pero conviene resolver la discrepancia cuando se regenere configuracion.
 
 ## Repos Evaluados
 
@@ -393,12 +395,12 @@ Orden de busqueda actual:
 /sdcard/doom1.wad
 ```
 
-Config y savegames usan `/sdcard/`. Si se arranca con WAD interno sin SD, Doom puede ejecutarse pero no hay persistencia de `default.cfg`, `doom.cfg` ni partidas.
+Las partidas usan `/sdcard/savegame/`. La configuracion (`default.cfg`, `doom.cfg`) no se lee ni se escribe: volumen, tamano de pantalla, etc. vuelven al valor por defecto en cada arranque. Si se arranca con WAD interno sin SD, Doom funciona pero guardar muestra `SAVE FAILED: NO SD`.
 
 Argumentos actuales de arranque standalone:
 
 ```text
-doom -iwad <wad_encontrado> -mb 4 -nomusic -nogui
+doom -iwad <wad_encontrado> -mb 6 -nomusic -nogui
 ```
 
 Notas:
@@ -406,7 +408,7 @@ Notas:
 | Parametro | Motivo |
 | --- | --- |
 | `-iwad <wad_encontrado>` | Ruta absoluta resuelta por `doom_app.c`. |
-| `-mb 4` | Zone memory inicial contenida; ajustar tras medir WADs concretos. |
+| `-mb 6` | Minimo por defecto de Chocolate Doom; va a PSRAM. Con 4 MB, mapas grandes o PWADs podian agotar la zona (los SFX quedan cacheados `PU_STATIC`). |
 | `-nomusic` | MUS/MIDI queda fuera; SFX si esta activo. |
 | `-nogui` | Evitar rutas desktop de error popup. |
 | Resolucion | Fijar por CMake/defines: `DOOMGENERIC_RESX=320`, `DOOMGENERIC_RESY=240`. |
@@ -432,9 +434,9 @@ Mapping minimo de PoC:
 | Move forward/back | Touch zona superior/inferior |
 | Turn left/right | Touch zona izquierda/derecha en la franja media |
 | Fire | `BOOT` activo bajo |
-| Menu select/enter | `BOOT` activo bajo y zona central |
+| Menu select/enter, confirmar Si/No | `BOOT` activo bajo y zona central |
 | Use/open | Zona central del touch |
-| Menu/escape | Pulsacion corta de `PWR` |
+| Menu/escape, responder No | Pulsacion corta de `PWR` |
 
 Si no se usa LVGL, el touch debe leerse mediante driver `esp_lcd_touch`/BSP touch sin depender del input device LVGL. Hay que definir si Doom toma ownership del touch durante su ejecucion.
 
@@ -504,7 +506,7 @@ Riesgos de memoria/build especificos:
 | Riesgo | Mitigacion inicial |
 | --- | --- |
 | `DG_ScreenBuffer` reservado con `malloc()` normal | Parche minimo para `heap_caps_malloc(..., MALLOC_CAP_SPIRAM)` o wrapper controlado |
-| Zone memory demasiado grande | Empezar con `-mb 4` y subir solo si WAD/engine lo requiere |
+| Zone memory demasiado grande | `-mb 6` en PSRAM; subir solo si WAD/engine lo requiere |
 | App supera slot `factory` 3 MB | Medir con `idf.py size`; aumentar slot si audio/codigo crece demasiado |
 | Buffers DMA en PSRAM | Mantener chunks DMA en `MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL` |
 | Warnings masivos de third-party | Arreglar/aislar flags por componente; no usar `-w` global como solucion permanente |

@@ -107,7 +107,12 @@ int mousebprevweapon = -1;
 int mousebnextweapon = -1;
 
 
+#ifdef ESP_PLATFORM
+// The port sends ENTER with BOOT/center touch (fire/use); don't re-show the last HUD message.
+int key_message_refresh = 0;
+#else
 int key_message_refresh = KEY_ENTER;
+#endif
 int key_pause = KEY_PAUSE;
 int key_demo_quit = 'q';
 int key_spy = KEY_F12;
@@ -154,7 +159,12 @@ int key_menu_left      = KEY_LEFTARROW;
 int key_menu_right     = KEY_RIGHTARROW;
 int key_menu_back      = KEY_BACKSPACE;
 int key_menu_forward   = KEY_ENTER;
+#ifdef ESP_PLATFORM
+// No keyboard: confirm Yes/No prompts with ENTER (BOOT or center touch).
+int key_menu_confirm   = KEY_ENTER;
+#else
 int key_menu_confirm   = 'y';
+#endif
 int key_menu_abort     = 'n';
 
 int key_menu_help      = KEY_F1;

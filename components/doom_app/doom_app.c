@@ -163,15 +163,11 @@ static void doom_task(void *arg)
     doom_app_mount_internal();
     doom_app_mount_sd();
 
+    // Engine paths are absolute (chdir() is not implemented on ESP-IDF).
     if (s_sd_mounted) {
-        if (chdir(BSP_SD_MOUNT_POINT) != 0) {
-            ESP_LOGW(TAG, "Failed to chdir to %s", BSP_SD_MOUNT_POINT);
-        } else {
-            ESP_LOGI(TAG, "Working directory set to %s", BSP_SD_MOUNT_POINT);
-        }
-        ESP_LOGI(TAG, "Doom config and savegames use %s/", BSP_SD_MOUNT_POINT);
+        ESP_LOGI(TAG, "Savegames use %s/", BSP_SD_MOUNT_POINT);
     } else {
-        ESP_LOGW(TAG, "SD not mounted; Doom config/savegame persistence is unavailable");
+        ESP_LOGW(TAG, "SD not mounted; savegames are unavailable");
     }
 
     // Search for WAD files
@@ -207,7 +203,7 @@ static void doom_task(void *arg)
     char *argv[] = {
         "doom",
         "-iwad", s_wad_path,
-        "-mb", "4",
+        "-mb", "6",
         "-nomusic",
         "-nogui",
     };

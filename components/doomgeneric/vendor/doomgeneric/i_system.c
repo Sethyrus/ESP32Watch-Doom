@@ -26,6 +26,7 @@
 #ifdef ESP_PLATFORM
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #endif
@@ -276,6 +277,10 @@ void I_Quit (void)
     SDL_Quit();
 
     exit(0);
+#elif defined(ESP_PLATFORM)
+    // exit() aborts on ESP-IDF; the exit hooks already shut sound down, so restart cleanly.
+    ESP_LOGI("doom", "I_Quit: restarting");
+    esp_restart();
 #endif
 }
 

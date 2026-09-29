@@ -51,7 +51,8 @@ int  I_GetTime (void)
 
     ticks -= basetime;
 
-    return (ticks * TICRATE) / 1000;
+    // 64-bit product: ticks * TICRATE overflows 32 bits after ~34 h of uptime.
+    return (int) (((uint64_t) ticks * TICRATE) / 1000);
 }
 
 

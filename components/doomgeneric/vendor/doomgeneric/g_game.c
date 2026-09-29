@@ -227,7 +227,12 @@ static char     savedescription[32];
 mobj_t*		bodyque[BODYQUESIZE]; 
 int		bodyqueslot; 
  
+#ifdef ESP_PLATFORM
+// Config is never loaded on ESP, so this can't be turned off at runtime; large levels would I_Error on save.
+int             vanilla_savegame_limit = 0;
+#else
 int             vanilla_savegame_limit = 1;
+#endif
 int             vanilla_demo_limit = 1;
  
 int G_CmdChecksum (ticcmd_t* cmd) 
@@ -1631,8 +1636,15 @@ void G_DoSaveGame (void)
         save_stream = fopen(recovery_savegame_file, "wb");
         if (save_stream == NULL)
         {
+#ifdef ESP_PLATFORM
+            // No SD card (or not writable): keep playing instead of halting in I_Error.
+            players[consoleplayer].message = "SAVE FAILED: NO SD";
+            gameaction = ga_nothing;
+            return;
+#else
             I_Error("Failed to open either '%s' or '%s' to write savegame.",
                     temp_savegame_file, recovery_savegame_file);
+#endif
         }
     }
 
