@@ -16,7 +16,7 @@ El reloj se sostiene en horizontal.
 | Disparar, aceptar en menu, confirmar Si/No | `BOOT` |
 | Menu / pausa, responder No | Pulsacion corta de `PWR` |
 
-No mantener `PWR` unos 6 s: apaga la placa. `Quit Game` → Si reinicia el reloj.
+Sigue la [convencion de botones](https://github.com/Sethyrus/ESP32Watch-core/blob/main/docs/ARCHITECTURE.md#convencion-de-botones) comun (`BOOT` = aceptar, `PWR` = atras/menu). No mantener `PWR` unos 6 s: apaga la placa. `Quit Game` → Si reinicia el reloj.
 
 ## Compilar y flashear
 

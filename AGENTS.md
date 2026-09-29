@@ -19,4 +19,5 @@
 - `partitions.csv`: `factory` 3 MB + `storage` FATFS 12 MB for the embedded WAD. BSP SPIFFS label is moved to `spiffs` so `bsp_spiffs_mount()` never touches `storage`.
 - Reuse `bsp_i2c_get_handle()` for devices on the shared I2C bus; never create a second master bus on the same port.
 - BOOT is GPIO0, active low. PWR is AXP2101 `PWRON` (short press via INTSTS2 IRQ); holding it ~6 s powers off the board.
+- Button convention: BOOT = accept/primary action, PWR short press = back/menu. See "Convencion De Botones" in core `docs/ARCHITECTURE.md`.
 - microSD uses BSP SDMMC 1-bit (`CLK GPIO2`, `CMD GPIO1`, `D0 GPIO3`).
