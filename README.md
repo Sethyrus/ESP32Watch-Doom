@@ -29,7 +29,7 @@ idf.py build
 idf.py -p <PORT> flash monitor   # p. ej. /dev/tty.usbmodem1101; sin -p lo autodetecta
 ```
 
-El puerto puede variar. Particiones: la tabla comun de [ESP32Watch-Launcher](https://github.com/Sethyrus/ESP32Watch-Launcher), con `storage` FAT ~8,4 MB para el WAD embebido. Sin WAD embebido (ninguno en `wad/`, o `CONFIG_DOOM_EMBED_WAD=n` en menuconfig > Doom), el firmware busca el WAD en la SD.
+El puerto puede variar. Particiones: la tabla comun de [ESP32Watch-Launcher](https://github.com/Sethyrus/ESP32Watch-Launcher), con `storage` FAT de 16 MB para el WAD embebido. Sin WAD embebido (ninguno en `wad/`, o `CONFIG_DOOM_EMBED_WAD=n` en menuconfig > Doom), el firmware busca el WAD en la SD.
 
 Para tenerlo junto a las demas apps y elegirlo desde un menu de arranque, grabarlo con el launcher (`./flash_all.sh`). "Quit Game" reinicia y vuelve al launcher; en standalone la app ocupa `factory` y reinicia Doom.
 

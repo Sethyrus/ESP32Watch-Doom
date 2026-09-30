@@ -22,12 +22,12 @@ El firmware incluye el motor, **no los datos del juego**. Hace falta un WAD que 
    idf.py -p <PORT> flash
    ```
 
-   Al compilar aparece `DOOM WAD Detected: ... Embedding into FATFS partition 'storage'`. CMake genera la imagen FAT de la particion `storage` (12 MB) y `idf.py flash` la graba. El firmware la monta read-only en `/internal`.
+   Al compilar aparece `DOOM WAD Detected: ... Embedding into FATFS partition 'storage'`. CMake genera la imagen FAT de la particion `storage` (16 MB) y `idf.py flash` la graba. El firmware la monta read-only en `/internal`.
 
    - El WAD se detecta al configurar CMake: si lo anades despues del primer build, ejecutar `idf.py reconfigure` antes de compilar.
    - Para no embeberlo aunque este en esta carpeta (y usar la SD), desactivar `idf.py menuconfig` > *Doom* > *Embed the WAD from wad/* (`CONFIG_DOOM_EMBED_WAD`). El valor queda en tu `sdkconfig` local.
    - Con [ESP32Watch-Launcher](https://github.com/Sethyrus/ESP32Watch-Launcher), `./flash_all.sh` graba la imagen solo si este build la genero.
-   - `idf.py flash` vuelve a grabar la imagen de 12 MB cada vez. Si solo cambia el codigo, `idf.py -p <PORT> app-flash` es mucho mas rapido.
+   - `idf.py flash` vuelve a grabar la imagen de 16 MB cada vez. Si solo cambia el codigo, `idf.py -p <PORT> app-flash` es mucho mas rapido.
 
 Sin SD no se pueden guardar partidas (el juego muestra `SAVE FAILED: NO SD` y sigue).
 

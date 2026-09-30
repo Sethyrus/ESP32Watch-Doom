@@ -114,8 +114,8 @@ Datos ya documentados:
 | ESP32Watch-core `docs/HARDWARE.md` | Pines, display, SD, touch, IMU, audio, PMU y BSP |
 | ESP32Watch-core `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
 | ESP32Watch-core `watch_board` | `BOOT` GPIO0 raw y pulsacion corta de `PWR` via AXP2101 (`watch_buttons.h`) |
-| `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 16 MB, BSP SPIFFS label separado de `storage` |
-| `partitions.csv` | Tabla comun del launcher: `factory` 1,5 MB, Doom en `ota_1` (2 MB), `storage` FAT ~8,4 MB para WAD interno |
+| `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 32 MB, BSP SPIFFS label separado de `storage` |
+| `partitions.csv` | Tabla comun del launcher: `factory` 1,5 MB, Doom en `ota_1` (2 MB), `storage` FAT de 16 MB (a partir de `0x1000000`) para WAD interno |
 | BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
 | BSP SD | `bsp_sdcard_mount()` y mount `/sdcard` |
 
@@ -524,14 +524,18 @@ factory,  app,  factory,  0x20000,  0x180000,
 ota_0,    app,  ota_0,    0x1a0000, 0x200000,
 ota_1,    app,  ota_1,    0x3a0000, 0x200000,
 ota_2,    app,  ota_2,    0x5a0000, 0x200000,
-storage,  data, fat,      0x7a0000, 0x860000,
+ota_3,    app,  ota_3,    0x7a0000,  0x200000,
+ota_4,    app,  ota_4,    0x9a0000,  0x200000,
+ota_5,    app,  ota_5,    0xba0000,  0x200000,
+ota_6,    app,  ota_6,    0xda0000,  0x200000,
+storage,  data, fat,      0x1000000, 0x1000000,
 ```
 
 Con el launcher, Doom va en `ota_1` y `app_main` llama a `watch_launcher_boot_once()`, asi que `I_Quit` (`esp_restart()`) vuelve al launcher. En standalone (`idf.py flash`) Doom ocupa `factory`. `flash_all.sh` del launcher graba `build/storage.bin` solo si este build lo genero (ver `CONFIG_DOOM_EMBED_WAD` en "Storage Y WAD").
 
 `storage` no es SPIFFS en este firmware. `sdkconfig.defaults` deja el label BSP SPIFFS en `spiffs` para que una llamada accidental a `bsp_spiffs_mount()` no intente montar la particion FAT como SPIFFS.
 
-El binario mide ~0,7 MB. Si supera el slot, o se necesitan coredumps o mas de ~8,4 MB de WAD interno, redisenar la tabla comun en el launcher (el chip es de 32 MB, aunque todo se configura a 16 MB).
+El binario mide ~0,7 MB. Si supera el slot, o se necesitan coredumps o mas de 16 MB de WAD interno, redisenar la tabla comun en el launcher (el codigo debe quedar por debajo de 16 MB; ver core `docs/GOTCHAS.md`).
 
 ## Licencias Y Assets
 
