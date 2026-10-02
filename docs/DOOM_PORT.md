@@ -113,10 +113,10 @@ Datos ya documentados:
 | --- | --- |
 | ESP32Watch-core `docs/HARDWARE.md` | Pines, display, SD, touch, IMU, audio, PMU y BSP |
 | ESP32Watch-core `docs/GOTCHAS.md` | LVGL no thread-safe, SH8601/CO5300, brillo QSPI, PSRAM, SD, PWR |
-| ESP32Watch-core `watch_board` | `BOOT` GPIO0 raw y pulsacion corta de `PWR` via AXP2101 (`watch_buttons.h`) |
+| ESP32Watch-core `watch_board` (v0.5.1) | `BOOT` GPIO0 raw y pulsacion corta de `PWR` via AXP2101 (`watch_buttons.h`); Doom no usa `watch_display` (framebuffer propio) |
 | `sdkconfig.defaults` | CPU 240 MHz, PSRAM octal 80 MHz, flash 32 MB, BSP SPIFFS label separado de `storage` |
 | `partitions.csv` | Tabla comun del launcher: `factory` 1,5 MB, Doom en `ota_1` (2 MB), `storage` FAT de 16 MB (a partir de `0x1000000`) para WAD interno |
-| BSP display | `bsp_display_new()`, `bsp_display_start()`, `bsp_display_brightness_set()` |
+| BSP display | `bsp_display_new()` y `bsp_display_brightness_set()` (nunca `bsp_display_start()`: registra el panel como RGB, ver core GOTCHAS) |
 | BSP SD | `bsp_sdcard_mount()` y mount `/sdcard` |
 
 ## Repos Evaluados
